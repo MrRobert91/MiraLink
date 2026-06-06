@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderMode } from "../lib/gazeProvider";
 import { MediapipeBrowserProvider } from "../lib/mediapipeBrowserProvider";
 import { PointerProvider } from "../lib/pointerProvider";
-import { RemotePythonProvider } from "../lib/remotePythonProvider";
 import type { GazeFrame, GazeProviderStatus, RawGazeMappingOptions } from "../types";
 
 type UseGazeProviderOptions = {
@@ -35,7 +34,7 @@ export function useGazeProvider({
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<GazeProviderStatus>("idle");
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  const providerRef = useRef<MediapipeBrowserProvider | PointerProvider | RemotePythonProvider | null>(null);
+  const providerRef = useRef<MediapipeBrowserProvider | PointerProvider | null>(null);
   const logBufferRef = useRef<string[]>([]);
   const mappingOptionsRef = useRef<Partial<RawGazeMappingOptions> | undefined>(mappingOptions);
 
@@ -43,8 +42,6 @@ export function useGazeProvider({
     switch (mode) {
       case "pointer":
         return "Modo puntero";
-      case "remote":
-        return "Proveedor Python remoto";
       default:
         return "MediaPipe + webcam";
     }
@@ -77,7 +74,7 @@ export function useGazeProvider({
     void (async () => {
       try {
         pushLog(`modo=${mode}`);
-        let provider: MediapipeBrowserProvider | PointerProvider | RemotePythonProvider;
+        let provider: MediapipeBrowserProvider | PointerProvider;
 
         if (mode === "pointer") {
           provider = new PointerProvider({
@@ -88,8 +85,6 @@ export function useGazeProvider({
               setFrame(nextFrame);
             },
           });
-        } else if (mode === "remote") {
-          provider = new RemotePythonProvider();
         } else {
           const videoElement = videoRef.current;
           if (!videoElement) {
