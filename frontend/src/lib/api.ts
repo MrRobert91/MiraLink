@@ -1,4 +1,12 @@
-import type { FormSubmissionDetail, FormSubmissionSummary, GoogleFormSubmitResponse, ImportedForm, SavedForm } from "../types";
+import type {
+  FormSubmissionDetail,
+  FormSubmissionSummary,
+  GoogleFormSubmitResponse,
+  ImportedForm,
+  MiraLinkPreferences,
+  MiraLinkProfile,
+  SavedForm,
+} from "../types";
 
 type RuntimeAppConfig = {
   VITE_API_BASE_URL?: string;
@@ -28,7 +36,7 @@ export function buildApiUrl(baseUrl: string, path: string): string {
   return `${normalizedBaseUrl}${normalizedPath}`;
 }
 
-const apiBaseUrl = resolveApiBaseUrl();
+const miralinkProfileId = "miralink-default";
 
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -45,7 +53,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function importGoogleForm(url: string): Promise<ImportedForm> {
-  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/import"), {
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), "/api/forms/import"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
@@ -60,6 +68,7 @@ export type FormQuestionMetaPayload = {
 };
 
 export type SubmitFormPayload = {
+  submission_id?: string;
   url: string;
   submit_url: string;
   answers: Record<string, string[]>;
@@ -71,7 +80,7 @@ export type SubmitFormPayload = {
 };
 
 export async function submitGoogleForm(payload: SubmitFormPayload): Promise<GoogleFormSubmitResponse> {
-  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/submit"), {
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), "/api/forms/submit"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -80,18 +89,18 @@ export async function submitGoogleForm(payload: SubmitFormPayload): Promise<Goog
 }
 
 export async function getSubmissions(): Promise<FormSubmissionSummary[]> {
-  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/admin/submissions"));
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), "/api/admin/submissions"));
   return parseJson<FormSubmissionSummary[]>(response);
 }
 
 export async function getSubmission(id: string): Promise<FormSubmissionDetail> {
-  const response = await fetch(buildApiUrl(apiBaseUrl, `/api/admin/submissions/${id}`));
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), `/api/admin/submissions/${id}`));
   return parseJson<FormSubmissionDetail>(response);
 }
 
 export function exportSubmissionsCsv(ids?: string[]): void {
   const query = ids && ids.length > 0 ? `?ids=${ids.join(",")}` : "";
-  const url = buildApiUrl(apiBaseUrl, `/api/admin/submissions/export/csv${query}`);
+  const url = buildApiUrl(resolveApiBaseUrl(), `/api/admin/submissions/export/csv${query}`);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = "respuestas.csv";
@@ -106,12 +115,12 @@ export type SaveFormPayload = {
 };
 
 export async function getSavedForms(): Promise<SavedForm[]> {
-  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/saved"));
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), "/api/forms/saved"));
   return parseJson<SavedForm[]>(response);
 }
 
 export async function saveForm(payload: SaveFormPayload): Promise<SavedForm[]> {
-  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/saved"), {
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), "/api/forms/saved"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -121,8 +130,29 @@ export async function saveForm(payload: SaveFormPayload): Promise<SavedForm[]> {
 
 export async function deleteSavedForm(url: string): Promise<void> {
   const response = await fetch(
-    buildApiUrl(apiBaseUrl, `/api/forms/saved?url=${encodeURIComponent(url)}`),
+    buildApiUrl(resolveApiBaseUrl(), `/api/forms/saved?url=${encodeURIComponent(url)}`),
     { method: "DELETE" },
   );
   if (!response.ok) throw new Error(`Error ${response.status}`);
+}
+
+export async function getProfile(): Promise<MiraLinkProfile> {
+  const response = await fetch(
+    buildApiUrl(resolveApiBaseUrl(), `/api/profiles/${miralinkProfileId}`),
+  );
+  return parseJson<MiraLinkProfile>(response);
+}
+
+export async function updateProfile(
+  preferences: MiraLinkPreferences,
+): Promise<MiraLinkProfile> {
+  const response = await fetch(
+    buildApiUrl(resolveApiBaseUrl(), `/api/profiles/${miralinkProfileId}`),
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(preferences),
+    },
+  );
+  return parseJson<MiraLinkProfile>(response);
 }

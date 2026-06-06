@@ -32,7 +32,11 @@ class SqliteFormResponseStore:
                     form_url TEXT NOT NULL,
                     provider TEXT NOT NULL,
                     submitted_at TEXT NOT NULL,
-                    duration_seconds REAL
+                    duration_seconds REAL,
+                    external_status TEXT NOT NULL DEFAULT 'unknown',
+                    external_status_code INTEGER,
+                    external_message TEXT,
+                    external_attempted_at TEXT
                 );
                 CREATE TABLE IF NOT EXISTS form_answers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,10 +63,26 @@ class SqliteFormResponseStore:
                     ON saved_forms(last_used_at DESC);
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(form_submissions)").fetchall()
+            }
+            migrations = {
+                "external_status": "TEXT NOT NULL DEFAULT 'unknown'",
+                "external_status_code": "INTEGER",
+                "external_message": "TEXT",
+                "external_attempted_at": "TEXT",
+            }
+            for column, definition in migrations.items():
+                if column not in columns:
+                    connection.execute(
+                        f"ALTER TABLE form_submissions ADD COLUMN {column} {definition}"
+                    )
 
     def record_submission(
         self,
         *,
+        submission_id: str | None = None,
         form_id: str,
         form_title: str,
         form_url: str,
@@ -70,15 +90,33 @@ class SqliteFormResponseStore:
         duration_seconds: float | None,
         answers: list[dict],
     ) -> str:
-        submission_id = uuid4().hex
+        submission_id = submission_id or uuid4().hex
         submitted_at = datetime.now(UTC).isoformat()
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO form_submissions (id, form_id, form_title, form_url, provider, submitted_at, duration_seconds)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO form_submissions (
+                    id, form_id, form_title, form_url, provider, submitted_at,
+                    duration_seconds, external_status, external_status_code,
+                    external_message, external_attempted_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, NULL)
+                ON CONFLICT(id) DO UPDATE SET
+                    form_id = excluded.form_id,
+                    form_title = excluded.form_title,
+                    form_url = excluded.form_url,
+                    provider = excluded.provider,
+                    duration_seconds = excluded.duration_seconds,
+                    external_status = 'pending',
+                    external_status_code = NULL,
+                    external_message = NULL,
+                    external_attempted_at = NULL
                 """,
                 (submission_id, form_id, form_title, form_url, provider, submitted_at, duration_seconds),
+            )
+            connection.execute(
+                "DELETE FROM form_answers WHERE submission_id = ?",
+                (submission_id,),
             )
             for answer in answers:
                 connection.execute(
@@ -96,12 +134,40 @@ class SqliteFormResponseStore:
                 )
         return submission_id
 
+    def update_external_status(
+        self,
+        submission_id: str,
+        *,
+        status: str,
+        status_code: int | None,
+        message: str,
+    ) -> None:
+        if status not in {"sent", "failed"}:
+            raise ValueError(f"Unsupported external status: {status}")
+        attempted_at = datetime.now(UTC).isoformat()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE form_submissions
+                SET external_status = ?,
+                    external_status_code = ?,
+                    external_message = ?,
+                    external_attempted_at = ?
+                WHERE id = ?
+                """,
+                (status, status_code, message, attempted_at, submission_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"Submission not found: {submission_id}")
+
     def list_submissions(self) -> list[dict]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
                 SELECT s.id, s.form_id, s.form_title, s.form_url, s.provider,
-                       s.submitted_at, s.duration_seconds,
+                       s.submitted_at, s.duration_seconds, s.external_status,
+                       s.external_status_code, s.external_message,
+                       s.external_attempted_at,
                        COUNT(a.id) AS answer_count
                 FROM form_submissions s
                 LEFT JOIN form_answers a ON a.submission_id = s.id
@@ -188,7 +254,18 @@ class SqliteFormResponseStore:
                     seen_questions.add(key)
                     all_questions.append(key)
 
-        fixed_columns = ["id", "form_title", "form_url", "provider", "submitted_at", "duration_seconds"]
+        fixed_columns = [
+            "id",
+            "form_title",
+            "form_url",
+            "provider",
+            "submitted_at",
+            "duration_seconds",
+            "external_status",
+            "external_status_code",
+            "external_message",
+            "external_attempted_at",
+        ]
         header = fixed_columns + all_questions
 
         output = io.StringIO()
@@ -203,6 +280,10 @@ class SqliteFormResponseStore:
                 sub["provider"],
                 sub["submitted_at"],
                 str(sub["duration_seconds"]) if sub["duration_seconds"] is not None else "",
+                sub["external_status"],
+                str(sub["external_status_code"]) if sub["external_status_code"] is not None else "",
+                sub["external_message"] or "",
+                sub["external_attempted_at"] or "",
             ]
             answers_map = {ans["question_title"]: ", ".join(ans["selected_options"]) for ans in answers_by_sub.get(sub["id"], [])}
             for q in all_questions:

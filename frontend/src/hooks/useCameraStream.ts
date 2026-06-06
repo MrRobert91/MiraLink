@@ -8,11 +8,13 @@ export function useCameraStream({ enabled }: UseCameraStreamOptions) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setReady(false);
       setError(null);
+      setStream(null);
       if (videoRef.current?.srcObject instanceof MediaStream) {
         videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
         videoRef.current.srcObject = null;
@@ -39,6 +41,7 @@ export function useCameraStream({ enabled }: UseCameraStreamOptions) {
         }
 
         stream = mediaStream;
+        setStream(mediaStream);
         const videoElement = videoRef.current;
         if (!videoElement) {
           setError("No se pudo inicializar el elemento de video.");
@@ -58,6 +61,7 @@ export function useCameraStream({ enabled }: UseCameraStreamOptions) {
     return () => {
       cancelled = true;
       setReady(false);
+      setStream(null);
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
@@ -70,6 +74,7 @@ export function useCameraStream({ enabled }: UseCameraStreamOptions) {
 
   return {
     videoRef,
+    stream,
     ready,
     error,
   };
