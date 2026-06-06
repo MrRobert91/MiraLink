@@ -22,6 +22,7 @@ class ProfilePreferences(BaseModel):
     invert_vertical_axis: bool = False
     camera_opacity: int = 35
     camera_visible: bool = True
+    center_precision: int = 50
 
 
 class UserProfile(BaseModel):
@@ -60,7 +61,8 @@ class SqliteProfileStore:
                     use_pitch_assist INTEGER NOT NULL DEFAULT 1,
                     invert_vertical_axis INTEGER NOT NULL DEFAULT 0,
                     camera_opacity INTEGER NOT NULL DEFAULT 35,
-                    camera_visible INTEGER NOT NULL DEFAULT 1
+                    camera_visible INTEGER NOT NULL DEFAULT 1,
+                    center_precision INTEGER NOT NULL DEFAULT 50
                 );
                 CREATE TABLE IF NOT EXISTS phrases (
                     user_id TEXT NOT NULL,
@@ -92,6 +94,7 @@ class SqliteProfileStore:
                 "invert_vertical_axis": "INTEGER NOT NULL DEFAULT 0",
                 "camera_opacity": "INTEGER NOT NULL DEFAULT 35",
                 "camera_visible": "INTEGER NOT NULL DEFAULT 1",
+                "center_precision": "INTEGER NOT NULL DEFAULT 50",
             }
             for column_name, definition in migration_columns.items():
                 if column_name not in existing_columns:
@@ -118,9 +121,9 @@ class SqliteProfileStore:
                     user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                     stabilization, horizontal_sensitivity, vertical_sensitivity,
                     theme, high_contrast, use_pitch_assist, invert_vertical_axis,
-                    camera_opacity, camera_visible
+                    camera_opacity, camera_visible, center_precision
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -134,7 +137,8 @@ class SqliteProfileStore:
                     use_pitch_assist=excluded.use_pitch_assist,
                     invert_vertical_axis=excluded.invert_vertical_axis,
                     camera_opacity=excluded.camera_opacity,
-                    camera_visible=excluded.camera_visible
+                    camera_visible=excluded.camera_visible,
+                    center_precision=excluded.center_precision
                 """,
                 (
                     user_id,
@@ -151,6 +155,7 @@ class SqliteProfileStore:
                     int(preferences.invert_vertical_axis),
                     preferences.camera_opacity,
                     int(preferences.camera_visible),
+                    preferences.center_precision,
                 ),
             )
         return self.get_profile(user_id)
@@ -163,7 +168,7 @@ class SqliteProfileStore:
                 SELECT user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                        stabilization, horizontal_sensitivity, vertical_sensitivity,
                        theme, high_contrast, use_pitch_assist, invert_vertical_axis,
-                       camera_opacity, camera_visible
+                       camera_opacity, camera_visible, center_precision
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -195,6 +200,7 @@ class SqliteProfileStore:
                 invert_vertical_axis=bool(preference_row["invert_vertical_axis"]),
                 camera_opacity=preference_row["camera_opacity"],
                 camera_visible=bool(preference_row["camera_visible"]),
+                center_precision=preference_row["center_precision"],
             ),
             quick_phrases=[row["text"] for row in phrase_rows],
         )

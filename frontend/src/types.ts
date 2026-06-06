@@ -220,6 +220,7 @@ export type MiraLinkPreferences = {
   invert_vertical_axis: boolean;
   camera_opacity: number;
   camera_visible: boolean;
+  center_precision: number;
 };
 
 export const defaultMiraLinkPreferences: MiraLinkPreferences = {
@@ -236,6 +237,7 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   invert_vertical_axis: false,
   camera_opacity: 35,
   camera_visible: true,
+  center_precision: 50,
 };
 
 export type MiraLinkProfile = {

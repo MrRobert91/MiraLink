@@ -37,6 +37,7 @@ import {
 } from "./lib/gazeCalibrationV2";
 import { resolveCalibrationTarget } from "./lib/calibration";
 import { OneEuroFilter, oneEuroOptionsForStabilization } from "./lib/oneEuroFilter";
+import { applyCenterPrecision } from "./lib/centerPrecision";
 import {
   defaultMiraLinkPreferences,
   themeOptions,
@@ -100,6 +101,7 @@ export default function App() {
   const [stabilization, setStabilization] = useState(82);
   const [cameraOpacity, setCameraOpacity] = useState(35);
   const [cameraVisible, setCameraVisible] = useState(true);
+  const [centerPrecision, setCenterPrecision] = useState(50);
   const [statusMessage, setStatusMessage] = useState("Listo para calibrar e importar un formulario.");
   const [importingForm, setImportingForm] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -154,15 +156,26 @@ export default function App() {
       return null;
     }
 
-    if (frame.features && calibrationModel.sampleCount >= 4) {
-      return applyCalibrationToFrame(frame.features, calibrationModel, {
-        horizontalSensitivity,
-        verticalSensitivity,
-      });
+    const point =
+      frame.features && calibrationModel.sampleCount >= 4
+        ? applyCalibrationToFrame(frame.features, calibrationModel, {
+            horizontalSensitivity,
+            verticalSensitivity,
+          })
+        : rawPoint;
+
+    if (!point) {
+      return null;
     }
 
-    return rawPoint;
-  }, [calibrationModel, frame, horizontalSensitivity, rawPoint, verticalSensitivity]);
+    // Zona de precisión central: reduce la sensibilidad cerca del centro
+    // conservando el alcance pleno en los bordes. Solo en modo mirada; con el
+    // ratón (modo pointer) no hay ruido que compensar y distorsionaría el cursor.
+    if (providerMode !== "mediapipe") {
+      return point;
+    }
+    return applyCenterPrecision(point, window.innerWidth, window.innerHeight, centerPrecision);
+  }, [calibrationModel, centerPrecision, frame, horizontalSensitivity, providerMode, rawPoint, verticalSensitivity]);
   const telemetry = useMemo(() => {
     if (!frame?.features) {
       return null;
@@ -632,6 +645,7 @@ export default function App() {
         setInvertVerticalAxis(preferences.invert_vertical_axis);
         setCameraOpacity(preferences.camera_opacity);
         setCameraVisible(preferences.camera_visible);
+        setCenterPrecision(preferences.center_precision);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -662,6 +676,7 @@ export default function App() {
       invert_vertical_axis: invertVerticalAxis,
       camera_opacity: cameraOpacity,
       camera_visible: cameraVisible,
+      center_precision: centerPrecision,
     }),
     [
       dwellMs,
@@ -675,6 +690,7 @@ export default function App() {
       verticalSensitivity,
       cameraOpacity,
       cameraVisible,
+      centerPrecision,
     ],
   );
 
@@ -696,6 +712,7 @@ export default function App() {
       setInvertVerticalAxis(saved.invert_vertical_axis);
       setCameraOpacity(saved.camera_opacity);
       setCameraVisible(saved.camera_visible);
+      setCenterPrecision(saved.center_precision);
       setPreferencesSaved(true);
     } catch {
       setPreferencesError("No se pudo guardar la configuración.");

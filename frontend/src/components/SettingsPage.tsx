@@ -210,6 +210,15 @@ export function SettingsPage({
             onChange={(value) => update("vertical_sensitivity", value)}
           />
           <RangeSetting
+            label="Precisión central"
+            value={draft.center_precision}
+            min={0}
+            max={100}
+            step={1}
+            suffix="%"
+            onChange={(value) => update("center_precision", value)}
+          />
+          <RangeSetting
             label="Opacidad de la cámara"
             value={draft.camera_opacity}
             min={0}

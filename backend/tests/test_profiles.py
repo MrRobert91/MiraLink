@@ -61,6 +61,7 @@ def test_profile_store_persists_all_miralink_preferences():
             invert_vertical_axis=True,
             camera_opacity=60,
             camera_visible=False,
+            center_precision=70,
         ),
     )
 
@@ -77,6 +78,7 @@ def test_profile_store_persists_all_miralink_preferences():
     assert preferences.invert_vertical_axis is True
     assert preferences.camera_opacity == 60
     assert preferences.camera_visible is False
+    assert preferences.center_precision == 70
 
 
 def test_profile_store_migrates_existing_preference_table_without_losing_values():
@@ -108,6 +110,7 @@ def test_profile_store_migrates_existing_preference_table_without_losing_values(
     assert profile.preferences.use_pitch_assist is True
     assert profile.preferences.camera_opacity == 35
     assert profile.preferences.camera_visible is True
+    assert profile.preferences.center_precision == 50
 
 
 def _workspace_database_path() -> Path:
