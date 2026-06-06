@@ -588,6 +588,8 @@ a:focus-visible {
 }
 
 .binary-question {
+  position: relative;
+  z-index: 1;
   text-align: center;
 }
 
@@ -605,6 +607,8 @@ a:focus-visible {
 }
 
 .binary-decision-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(170px, 0.38fr) minmax(0, 1fr);
   gap: 18px;
@@ -677,6 +681,40 @@ a:focus-visible {
 .decision-rest-zone strong {
   color: var(--text);
   font-size: 1.1rem;
+}
+
+/* Full-screen side zones that mirror the gaze detection bands. */
+.decision-side-overlays {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.decision-side-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.decision-side-overlay--no {
+  left: 0;
+  width: var(--rest-left, 0);
+  background: linear-gradient(to right, var(--no-bg), transparent);
+  box-shadow: inset 4px 0 0 var(--no-border);
+}
+
+.decision-side-overlay--yes {
+  left: var(--rest-right, 100%);
+  right: 0;
+  background: linear-gradient(to left, var(--yes-bg), transparent);
+  box-shadow: inset -4px 0 0 var(--yes-border);
+}
+
+.decision-side-overlay--active {
+  opacity: 0.55;
 }
 
 /* ── Review ───────────────────────────────────────────────────────────────── */

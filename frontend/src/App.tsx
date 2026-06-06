@@ -226,8 +226,8 @@ export default function App() {
   );
   const resolveDecisionTargetId = useCallback(
     (gazePoint: GazePoint | null, targets: Parameters<typeof resolveBinaryDecisionTarget>[1]) =>
-      resolveBinaryDecisionTarget(gazePoint, targets),
-    [],
+      resolveBinaryDecisionTarget(gazePoint, targets, neutralZonePercent),
+    [neutralZonePercent],
   );
 
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
