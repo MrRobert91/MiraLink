@@ -36,6 +36,7 @@ import {
   type CalibrationModelV2,
 } from "./lib/gazeCalibrationV2";
 import { resolveCalibrationTarget } from "./lib/calibration";
+import { OneEuroFilter, oneEuroOptionsForStabilization } from "./lib/oneEuroFilter";
 import {
   defaultMiraLinkPreferences,
   themeOptions,
@@ -128,6 +129,7 @@ export default function App() {
   const featureWindowRef = useRef<GazeFeatureVector[]>([]);
   const qualityWindowRef = useRef<number[]>([]);
   const correctedPointWindowRef = useRef<GazePoint[]>([]);
+  const oneEuroFilterRef = useRef<{ x: OneEuroFilter; y: OneEuroFilter } | null>(null);
 
   const camera = useCameraStream({ enabled: providerMode === "mediapipe" });
   const mappingOptions = useMemo(
@@ -255,10 +257,14 @@ export default function App() {
   useEffect(() => {
     if (!correctedPoint) {
       correctedPointWindowRef.current = [];
+      oneEuroFilterRef.current?.x.reset();
+      oneEuroFilterRef.current?.y.reset();
       setSmoothedPoint(null);
       return;
     }
 
+    // Mediana móvil para descartar picos de un solo frame (frames atípicos por
+    // pérdida momentánea de iris) antes del filtrado temporal.
     correctedPointWindowRef.current = [...correctedPointWindowRef.current, correctedPoint].slice(-5);
     const medianX = [...correctedPointWindowRef.current.map((point) => point.x)].sort((a, b) => a - b)[
       Math.floor(correctedPointWindowRef.current.length / 2)
@@ -266,18 +272,25 @@ export default function App() {
     const medianY = [...correctedPointWindowRef.current.map((point) => point.y)].sort((a, b) => a - b)[
       Math.floor(correctedPointWindowRef.current.length / 2)
     ];
-    const filteredPoint = { x: medianX, y: medianY };
 
-    setSmoothedPoint((previousPoint) => {
-      if (!previousPoint) {
-        return filteredPoint;
-      }
-
-      const alpha = Math.max(0.08, (100 - stabilization) / 100);
-      return {
-        x: previousPoint.x + (filteredPoint.x - previousPoint.x) * alpha,
-        y: previousPoint.y + (filteredPoint.y - previousPoint.y) * alpha,
+    // Filtro One-Euro: suaviza fuerte el temblor al fijar la mirada y casi no
+    // añade retardo en movimientos reales. El ajuste de estabilización de la UI
+    // controla cuánto suaviza en reposo.
+    const options = oneEuroOptionsForStabilization(stabilization);
+    if (!oneEuroFilterRef.current) {
+      oneEuroFilterRef.current = {
+        x: new OneEuroFilter(options),
+        y: new OneEuroFilter(options),
       };
+    } else {
+      oneEuroFilterRef.current.x.setOptions(options);
+      oneEuroFilterRef.current.y.setOptions(options);
+    }
+
+    const now = performance.now();
+    setSmoothedPoint({
+      x: oneEuroFilterRef.current.x.filter(medianX, now),
+      y: oneEuroFilterRef.current.y.filter(medianY, now),
     });
   }, [correctedPoint, stabilization]);
 
