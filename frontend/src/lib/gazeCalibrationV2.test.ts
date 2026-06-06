@@ -60,6 +60,36 @@ describe("feature-based calibration", () => {
     expect(model.axisRangeX?.targetMax).toBeGreaterThan(1080);
   });
 
+  it("auto-tunes the blend weight and scores honestly (lower for noisier data)", () => {
+    const clean: CalibrationSampleV2[] = [
+      { features: createFeatures(-0.06, -0.06), target: { x: 200, y: 160 }, quality: 0.95 },
+      { features: createFeatures(0, -0.05), target: { x: 640, y: 180 }, quality: 0.95 },
+      { features: createFeatures(0.05, -0.04), target: { x: 1080, y: 210 }, quality: 0.95 },
+      { features: createFeatures(-0.04, 0.01), target: { x: 260, y: 420 }, quality: 0.95 },
+      { features: createFeatures(0.01, 0.02), target: { x: 700, y: 470 }, quality: 0.95 },
+      { features: createFeatures(0.05, 0.05), target: { x: 1100, y: 560 }, quality: 0.95 },
+    ];
+
+    const cleanModel = buildCalibrationModelV2(clean);
+    // El peso de mezcla queda fijado a uno de los candidatos del auto-ajuste.
+    expect([0, 0.25, 0.5, 0.75, 1]).toContain(cleanModel.blendWeight);
+    expect(cleanModel.score).toBeGreaterThan(0);
+    expect(cleanModel.score).toBeLessThanOrEqual(1);
+
+    // Mismas señales pero objetivos incoherentes: la relación señal→pantalla se
+    // vuelve impredecible, así que la validación cruzada debe penalizar el score.
+    const noisy = clean.map((sample, index) => ({
+      ...sample,
+      target: {
+        x: sample.target.x + (index % 2 === 0 ? -260 : 260),
+        y: sample.target.y + (index % 2 === 0 ? 200 : -200),
+      },
+    }));
+
+    const noisyModel = buildCalibrationModelV2(noisy);
+    expect(noisyModel.score).toBeLessThan(cleanModel.score);
+  });
+
   it("expands a compressed calibrated point to the observed target span", () => {
     const expanded = expandPointWithAxisRanges(
       { x: 420, y: 360 },

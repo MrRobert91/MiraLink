@@ -8,7 +8,8 @@ type SettingsPageProps = {
   error: string | null;
   saved: boolean;
   diagnostics?: ReactNode;
-  onSave: (preferences: MiraLinkPreferences) => Promise<void> | void;
+  onSave: (preferences: MiraLinkPreferences) => Promise<boolean> | boolean;
+  onReturnToForm?: () => void;
 };
 
 type RangeSettingProps = {
@@ -59,6 +60,7 @@ export function SettingsPage({
   saved,
   diagnostics,
   onSave,
+  onReturnToForm,
 }: SettingsPageProps) {
   const [draft, setDraft] = useState(preferences);
 
@@ -87,6 +89,18 @@ export function SettingsPage({
       theme: value,
       high_contrast: option?.highContrast ?? false,
     }));
+  };
+
+  const cancelChanges = () => {
+    setDraft(preferences);
+    onReturnToForm?.();
+  };
+
+  const saveChanges = async () => {
+    const savedSuccessfully = await onSave(draft);
+    if (savedSuccessfully) {
+      onReturnToForm?.();
+    }
   };
 
   return (
@@ -256,7 +270,7 @@ export function SettingsPage({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => setDraft(preferences)}
+            onClick={cancelChanges}
           >
             Cancelar
           </button>
@@ -264,7 +278,7 @@ export function SettingsPage({
             type="button"
             className="primary-button"
             disabled={saving}
-            onClick={() => void onSave(draft)}
+            onClick={() => void saveChanges()}
           >
             {saving ? "Guardando..." : "Guardar cambios"}
           </button>

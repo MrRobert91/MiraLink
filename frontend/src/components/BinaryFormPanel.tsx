@@ -146,6 +146,11 @@ export function BinaryFormPanel({
         </div>
       ) : null}
       <header className="binary-question">
+        <p className="question-type-label">
+          {step.questionType === "radio"
+            ? "Respuesta única (radio)"
+            : "Respuesta múltiple (casillas)"}
+        </p>
         <p className="eyebrow">
           Pregunta {step.questionIndex + 1}/{step.totalQuestions} - Opcion {step.optionIndex + 1}/{step.totalOptions}
         </p>

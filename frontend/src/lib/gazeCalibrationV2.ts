@@ -42,10 +42,24 @@ export type CalibrationModelV2 = {
   axisRangeY: AxisRangeCalibration | null;
   axisAnchorsX: AxisAnchorCalibration | null;
   axisAnchorsY: AxisAnchorCalibration | null;
+  /**
+   * Peso de la regresión 2-D en la mezcla con el mapeo por anclas, elegido por
+   * auto-ajuste durante la calibración. Opcional para compatibilidad; si falta,
+   * se usa `regressionBlendWeight`.
+   */
+  blendWeight?: number;
 };
 
 const ridgeLambda = 0.01;
 const calibrationEdgeExpansionFactor = 0.125;
+// Rejilla de candidatos para el auto-ajuste por validación cruzada (leave-one-out).
+const blendWeightCandidates = [0, 0.25, 0.5, 0.75, 1];
+const ridgeLambdaCandidates = [0.01, 0.1, 1];
+// Mínimo de muestras para que cada pliegue de LOO conserve >= 4 (lo que necesita
+// la regresión). Por debajo, usamos los valores por defecto sin auto-ajuste.
+const minSamplesForAutoTune = 6;
+// Error normalizado (fracción del rango calibrado) al que el score llega a 0.
+const scoreErrorTolerance = 0.25;
 // Peso de la regresión 2-D en la mezcla con el mapeo por anclas. La regresión
 // capta el acoplamiento entre ejes (la señal horizontal varía con la altura de
 // la mirada y viceversa), que el mapeo 1-D por anclas ignora; las anclas, a su
@@ -67,6 +81,7 @@ export function createEmptyCalibrationModelV2(): CalibrationModelV2 {
     axisRangeY: null,
     axisAnchorsX: null,
     axisAnchorsY: null,
+    blendWeight: regressionBlendWeight,
   };
 }
 
@@ -140,7 +155,7 @@ function solveLinearSystem(matrix: number[][], vector: number[]) {
   return augmented.map((row) => row[size] ?? 0);
 }
 
-function fitAxis(samples: CalibrationSampleV2[], targetKey: "x" | "y") {
+function fitAxis(samples: CalibrationSampleV2[], targetKey: "x" | "y", lambda: number = ridgeLambda) {
   if (samples.length < 4) {
     return [];
   }
@@ -186,7 +201,7 @@ function fitAxis(samples: CalibrationSampleV2[], targetKey: "x" | "y") {
 
   // No penalizamos el sesgo (col 0).
   for (let diagonal = 1; diagonal < cols; diagonal += 1) {
-    xtx[diagonal][diagonal] += ridgeLambda;
+    xtx[diagonal][diagonal] += lambda;
   }
 
   const standardizedWeights = solveLinearSystem(xtx, xty);
@@ -413,12 +428,15 @@ export function applyCalibrationToFrame(
     y: applyAxisCalibration(signalPoint.y, model.axisRangeY, model.axisAnchorsY, 1),
   };
 
+  const blendWeight = model.blendWeight ?? regressionBlendWeight;
+
   return {
     x: blendAxisPrediction(
       regressionPoint.x,
       calibratedPoint.x,
       model.axisRangeX,
       model.axisAnchorsX,
+      blendWeight,
       options?.horizontalSensitivity ?? 1,
     ),
     y: blendAxisPrediction(
@@ -426,6 +444,7 @@ export function applyCalibrationToFrame(
       calibratedPoint.y,
       model.axisRangeY,
       model.axisAnchorsY,
+      blendWeight,
       options?.verticalSensitivity ?? 1,
     ),
   };
@@ -442,6 +461,7 @@ function blendAxisPrediction(
   calibratedValue: number,
   axisRange: AxisRangeCalibration | null,
   axisAnchors: AxisAnchorCalibration | null,
+  blendWeight: number,
   sensitivity: number,
 ) {
   if (!axisRange && !axisAnchors) {
@@ -451,7 +471,7 @@ function blendAxisPrediction(
   const anchorTargets = axisAnchors?.points.map((point) => point.target) ?? [calibratedValue];
   const rangeMin = axisRange?.targetMin ?? Math.min(...anchorTargets);
   const rangeMax = axisRange?.targetMax ?? Math.max(...anchorTargets);
-  const blended = regressionBlendWeight * regressionValue + (1 - regressionBlendWeight) * calibratedValue;
+  const blended = blendWeight * regressionValue + (1 - blendWeight) * calibratedValue;
   const center = (rangeMin + rangeMax) / 2;
   const boosted = center + (blended - center) * sensitivity;
 
@@ -486,43 +506,138 @@ export function buildCalibrationTelemetry(
   };
 }
 
+type CalibrationModelParts = Pick<
+  CalibrationModelV2,
+  "weightsX" | "weightsY" | "axisRangeX" | "axisRangeY" | "axisAnchorsX" | "axisAnchorsY"
+>;
+
+function buildModelParts(samples: CalibrationSampleV2[], lambda: number): CalibrationModelParts {
+  const weightsX = fitAxis(samples, "x", lambda);
+  const weightsY = fitAxis(samples, "y", lambda);
+  return {
+    weightsX,
+    weightsY,
+    axisRangeX: buildAxisRangeCalibration(samples, weightsX, "x"),
+    axisRangeY: buildAxisRangeCalibration(samples, weightsY, "y"),
+    axisAnchorsX: buildAxisAnchors(samples, "x"),
+    axisAnchorsY: buildAxisAnchors(samples, "y"),
+  };
+}
+
+function partsToModel(
+  parts: CalibrationModelParts,
+  sampleCount: number,
+  blendWeight: number,
+): CalibrationModelV2 {
+  return { ...parts, score: 0, sampleCount, blendWeight };
+}
+
+function axisTargetSpan(samples: CalibrationSampleV2[], targetKey: "x" | "y") {
+  const values = samples.map((sample) => sample.target[targetKey]);
+  return Math.max(...values) - Math.min(...values);
+}
+
+/**
+ * Combina el error medio absoluto de cada eje en un error único normalizado por
+ * el rango de objetivos de calibración (fracción de pantalla cubierta). Así el
+ * score es independiente de la resolución y comparable entre sesiones.
+ */
+function normalizedAxisError(meanErrorX: number, meanErrorY: number, spanX: number, spanY: number) {
+  const parts: number[] = [];
+  if (spanX > 1e-6) {
+    parts.push(meanErrorX / spanX);
+  }
+  if (spanY > 1e-6) {
+    parts.push(meanErrorY / spanY);
+  }
+  if (parts.length === 0) {
+    return 0;
+  }
+  return parts.reduce((sum, value) => sum + value, 0) / parts.length;
+}
+
+/**
+ * Error de generalización estimado por validación cruzada leave-one-out: para
+ * cada muestra, ajusta el modelo con las demás y predice la excluida. Es una
+ * medida honesta (no mira los datos con los que se entrenó), a diferencia del
+ * error de entrenamiento que premiaba el sobreajuste de las anclas.
+ */
+function leaveOneOutNormalizedError(
+  samples: CalibrationSampleV2[],
+  lambda: number,
+  blendWeight: number,
+  spanX: number,
+  spanY: number,
+) {
+  let sumErrorX = 0;
+  let sumErrorY = 0;
+  for (let heldOut = 0; heldOut < samples.length; heldOut += 1) {
+    const trainingSamples = samples.filter((_, index) => index !== heldOut);
+    const parts = buildModelParts(trainingSamples, lambda);
+    const model = partsToModel(parts, trainingSamples.length, blendWeight);
+    const predicted = applyCalibrationToFrame(samples[heldOut].features, model);
+    sumErrorX += Math.abs(predicted.x - samples[heldOut].target.x);
+    sumErrorY += Math.abs(predicted.y - samples[heldOut].target.y);
+  }
+  const count = samples.length;
+  return normalizedAxisError(sumErrorX / count, sumErrorY / count, spanX, spanY);
+}
+
+function trainingNormalizedError(
+  samples: CalibrationSampleV2[],
+  model: CalibrationModelV2,
+  spanX: number,
+  spanY: number,
+) {
+  let sumErrorX = 0;
+  let sumErrorY = 0;
+  for (const sample of samples) {
+    const predicted = applyCalibrationToFrame(sample.features, model);
+    sumErrorX += Math.abs(predicted.x - sample.target.x);
+    sumErrorY += Math.abs(predicted.y - sample.target.y);
+  }
+  const count = samples.length;
+  return normalizedAxisError(sumErrorX / count, sumErrorY / count, spanX, spanY);
+}
+
 export function buildCalibrationModelV2(samples: CalibrationSampleV2[]): CalibrationModelV2 {
   if (samples.length < 4) {
     return createEmptyCalibrationModelV2();
   }
 
-  const weightsX = fitAxis(samples, "x");
-  const weightsY = fitAxis(samples, "y");
-  const axisRangeX = buildAxisRangeCalibration(samples, weightsX, "x");
-  const axisRangeY = buildAxisRangeCalibration(samples, weightsY, "y");
-  const axisAnchorsX = buildAxisAnchors(samples, "x");
-  const axisAnchorsY = buildAxisAnchors(samples, "y");
+  const spanX = axisTargetSpan(samples, "x");
+  const spanY = axisTargetSpan(samples, "y");
 
-  const meanAbsoluteError =
-    samples.reduce((sum, sample) => {
-      const predicted = applyCalibrationToFrame(sample.features, {
-        weightsX,
-        weightsY,
-        score: 0,
-        sampleCount: samples.length,
-        axisRangeX,
-        axisRangeY,
-        axisAnchorsX,
-        axisAnchorsY,
-      });
-      return sum + Math.abs(predicted.x - sample.target.x) + Math.abs(predicted.y - sample.target.y);
-    }, 0) /
-    (samples.length * 2);
+  let bestLambda = ridgeLambda;
+  let bestBlendWeight = regressionBlendWeight;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  // Auto-ajuste: elegimos la regularización y el peso de mezcla que minimizan el
+  // error de generalización (LOO). Con pocas muestras LOO no es fiable, así que
+  // mantenemos los valores por defecto.
+  if (samples.length >= minSamplesForAutoTune) {
+    for (const lambda of ridgeLambdaCandidates) {
+      for (const blendWeight of blendWeightCandidates) {
+        const error = leaveOneOutNormalizedError(samples, lambda, blendWeight, spanX, spanY);
+        if (error < bestError) {
+          bestError = error;
+          bestLambda = lambda;
+          bestBlendWeight = blendWeight;
+        }
+      }
+    }
+  }
+
+  const parts = buildModelParts(samples, bestLambda);
+  const model = partsToModel(parts, samples.length, bestBlendWeight);
+
+  if (!Number.isFinite(bestError)) {
+    bestError = trainingNormalizedError(samples, model, spanX, spanY);
+  }
 
   return {
-    weightsX,
-    weightsY,
-    score: clamp(1 - meanAbsoluteError / 220, 0, 1),
-    sampleCount: samples.length,
-    axisRangeX,
-    axisRangeY,
-    axisAnchorsX,
-    axisAnchorsY,
+    ...model,
+    score: clamp(1 - bestError / scoreErrorTolerance, 0, 1),
   };
 }
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { AppNavigation } from "./components/AppNavigation";
+import { AnsweringToolbar } from "./components/AnsweringToolbar";
 import { BinaryFormPanel } from "./components/BinaryFormPanel";
 import { GazeOverlayPreview } from "./components/GazeOverlayPreview";
 import { CalibrationCameraBackdrop } from "./components/CalibrationCameraBackdrop";
@@ -40,6 +41,7 @@ import { OneEuroFilter, oneEuroOptionsForStabilization } from "./lib/oneEuroFilt
 import { applyCenterPrecision } from "./lib/centerPrecision";
 import {
   defaultMiraLinkPreferences,
+  normalizeThemeName,
   themeOptions,
   type CalibrationSampleV2,
   type GazeFeatureVector,
@@ -86,6 +88,7 @@ function clampPointToViewport(point: GazePoint | null) {
 
 export default function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formUrl, setFormUrl] = useState("");
   const [activeFormUrl, setActiveFormUrl] = useState("");
   const [formFlow, dispatchFormFlow] = useReducer(formFlowReducer, undefined, createInitialFormFlowState);
@@ -582,7 +585,7 @@ export default function App() {
         setCalibrationActive(false);
         setCalibrationProgress(0);
         appendCalibrationLog(
-          `modelo final | muestras=${nextModel.sampleCount} score=${Math.round(nextModel.score * 100)}% rangoX=${
+          `modelo final | muestras=${nextModel.sampleCount} score=${Math.round(nextModel.score * 100)}% (LOO) mezcla=${nextModel.blendWeight ?? "?"} rangoX=${
             nextModel.axisRangeX
               ? `${Math.round(nextModel.axisRangeX.targetMin)}-${Math.round(nextModel.axisRangeX.targetMax)} inv=${nextModel.axisRangeX.invert ? "si" : "no"}`
               : "null"
@@ -640,7 +643,7 @@ export default function App() {
         setStabilization(preferences.stabilization);
         setHorizontalSensitivity(preferences.horizontal_sensitivity);
         setVerticalSensitivity(preferences.vertical_sensitivity);
-        setTheme(preferences.theme ?? "light");
+        setTheme(normalizeThemeName(preferences.theme));
         setUsePitchAssist(preferences.use_pitch_assist);
         setInvertVerticalAxis(preferences.invert_vertical_axis);
         setCameraOpacity(preferences.camera_opacity);
@@ -707,15 +710,17 @@ export default function App() {
       setStabilization(saved.stabilization);
       setHorizontalSensitivity(saved.horizontal_sensitivity);
       setVerticalSensitivity(saved.vertical_sensitivity);
-      setTheme(saved.theme ?? "light");
+      setTheme(normalizeThemeName(saved.theme));
       setUsePitchAssist(saved.use_pitch_assist);
       setInvertVerticalAxis(saved.invert_vertical_axis);
       setCameraOpacity(saved.camera_opacity);
       setCameraVisible(saved.camera_visible);
       setCenterPrecision(saved.center_precision);
       setPreferencesSaved(true);
+      return true;
     } catch {
       setPreferencesError("No se pudo guardar la configuración.");
+      return false;
     } finally {
       setSavingPreferences(false);
     }
@@ -725,6 +730,21 @@ export default function App() {
   const compatibleQuestionCount = formFlow.form?.questions.length ?? 0;
   const binaryStepCount = formFlow.steps.length;
   const immersive = calibrationActive || calibrationInstructionsOpen || formFlow.status === "answering";
+  const returnToAnswering =
+    location.pathname === "/configuracion" &&
+    Boolean((location.state as { returnToForm?: boolean } | null)?.returnToForm);
+
+  const handleOpenSettingsFromAnswering = useCallback(() => {
+    dispatchFormFlow({ type: "pauseAnswering" });
+    resetDwell();
+    navigate("/configuracion", { state: { returnToForm: true } });
+  }, [navigate, resetDwell]);
+
+  const handleReturnToAnswering = useCallback(() => {
+    dispatchFormFlow({ type: "startAnswering" });
+    resetDwell();
+    navigate("/", { replace: true });
+  }, [navigate, resetDwell]);
 
   const handleCancelCalibration = () => {
     setCalibrationActive(false);
@@ -823,22 +843,13 @@ export default function App() {
           element={
             formFlow.status === "answering" ? (
               <main className="answering-screen">
-                <header className="answering-toolbar">
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => dispatchFormFlow({ type: "pauseAnswering" })}
-                  >
-                    Salir
-                  </button>
-                  <strong>
-                    Paso {Math.min(formFlow.currentStepIndex + 1, binaryStepCount)} de{" "}
-                    {binaryStepCount}
-                  </strong>
-                  <span className={ready ? "tracking-status tracking-status--ready" : "tracking-status"}>
-                    {ready ? "Seguimiento listo" : "Inicializando mirada"}
-                  </span>
-                </header>
+                <AnsweringToolbar
+                  currentStep={Math.min(formFlow.currentStepIndex + 1, binaryStepCount)}
+                  totalSteps={binaryStepCount}
+                  trackingReady={ready}
+                  onExit={() => dispatchFormFlow({ type: "pauseAnswering" })}
+                  onOpenSettings={handleOpenSettingsFromAnswering}
+                />
                 <BinaryFormPanel
                   form={formFlow.form}
                   step={activeStep}
@@ -971,6 +982,7 @@ export default function App() {
                 saved={preferencesSaved}
                 diagnostics={diagnostics}
                 onSave={handleSavePreferences}
+                onReturnToForm={returnToAnswering ? handleReturnToAnswering : undefined}
               />
             ) : (
               <main className="page-container loading-page">Cargando configuración...</main>

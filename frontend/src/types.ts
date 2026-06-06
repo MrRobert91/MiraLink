@@ -157,7 +157,7 @@ export type SavedForm = {
   last_used_at: string;
 };
 
-export type ThemeName = "light" | "dark" | "hc-yellow" | "hc-amber" | "hc-mono";
+export type ThemeName = "light" | "dark" | "colorblind" | "hc-amber" | "hc-mono";
 
 export type ThemeOption = {
   value: ThemeName;
@@ -179,22 +179,22 @@ export const themeOptions: ThemeOption[] = [
   {
     value: "dark",
     label: "Oscuro",
-    description: "Fondo verde oscuro y texto claro para entornos con poca luz.",
-    swatch: ["#0d1c1f", "#76f1bd", "#f8fbf7"],
-    highContrast: false,
+    description: "Inversión del modo blanco y negro: fondo negro y texto blanco.",
+    swatch: ["#000000", "#ffffff", "#ffffff"],
+    highContrast: true,
+  },
+  {
+    value: "colorblind",
+    label: "Modo daltónico",
+    description: "Fondo claro con respuestas azules y naranjas de alto contraste.",
+    swatch: ["#ffffff", "#005a9c", "#b45309"],
+    highContrast: true,
   },
   {
     value: "hc-amber",
     label: "Negro sobre amarillo",
     description: "Fondo amarillo intenso con texto negro. Máximo contraste.",
     swatch: ["#ffe600", "#000000", "#000000"],
-    highContrast: true,
-  },
-  {
-    value: "hc-yellow",
-    label: "Amarillo sobre negro",
-    description: "Fondo negro con texto amarillo. Reduce el brillo de pantalla.",
-    swatch: ["#000000", "#ffff00", "#ffff00"],
     highContrast: true,
   },
   {
@@ -205,6 +205,17 @@ export const themeOptions: ThemeOption[] = [
     highContrast: true,
   },
 ];
+
+const themeNames = new Set<ThemeName>(themeOptions.map((option) => option.value));
+
+export function normalizeThemeName(value: unknown): ThemeName {
+  if (value === "hc-yellow") {
+    return "dark";
+  }
+  return typeof value === "string" && themeNames.has(value as ThemeName)
+    ? (value as ThemeName)
+    : "light";
+}
 
 export type MiraLinkPreferences = {
   language: "es";

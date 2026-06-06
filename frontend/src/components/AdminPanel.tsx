@@ -38,9 +38,9 @@ function AnswerDetail({ answers }: { answers: FormAnswerRecord[] }) {
         <li key={a.entry_id} className="admin-answer-item">
           <span className="admin-answer-question">{a.question_title}</span>
           <span className="admin-answer-type">({a.question_type})</span>
-          <span className="admin-answer-value">
+          <strong className="admin-answer-value">
             {a.selected_options.length > 0 ? a.selected_options.join(", ") : <em>Sin respuesta</em>}
-          </span>
+          </strong>
         </li>
       ))}
     </ul>
