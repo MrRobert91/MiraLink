@@ -728,7 +728,7 @@ export default function App() {
         />
       ) : null}
 
-      {!immersive ? <AppNavigation /> : null}
+      {!immersive ? <AppNavigation onHome={handleResetForm} /> : null}
       <div className="runtime-media-source" aria-hidden="true">
         <video ref={camera.videoRef} autoPlay muted playsInline />
         <canvas ref={overlayRef} />
