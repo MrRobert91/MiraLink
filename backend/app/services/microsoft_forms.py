@@ -111,7 +111,7 @@ def _find_submit_url_in_html(html: str) -> str:
 
 def _construct_submit_url_from_data(data: dict[str, Any]) -> str:
     """Build the MS Forms submit URL from tenant/user/form IDs in *data*."""
-    tenant_id = _first_string(data, ("tenantId", "tid", "TenantId"))
+    tenant_id = _first_string(data, ("tenantId", "tid", "TenantId", "ownerTenantId"))
     user_id = _first_string(data, ("userId", "ownerId", "creatorId", "UserId", "authorId"))
     encrypted_id = _first_string(data, ("id",))
     logger.debug(
