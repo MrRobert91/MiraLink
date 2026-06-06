@@ -20,12 +20,13 @@ describe("SettingsPage", () => {
     );
 
     await user.selectOptions(screen.getByLabelText("Modo de entrada"), "pointer");
-    await user.click(screen.getByLabelText("Contraste alto"));
+    await user.click(screen.getByLabelText("Negro sobre amarillo"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     expect(onSave).toHaveBeenCalledWith({
       ...defaultMiraLinkPreferences,
       provider_mode: "pointer",
+      theme: "hc-amber",
       high_contrast: true,
     });
   });

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import type { MiraLinkPreferences } from "../types";
+import { themeOptions, type MiraLinkPreferences, type ThemeName } from "../types";
 
 type SettingsPageProps = {
   preferences: MiraLinkPreferences;
@@ -66,10 +66,28 @@ export function SettingsPage({
     setDraft(preferences);
   }, [preferences]);
 
+  // Previsualiza el esquema de color en vivo mientras se elige; si se sale sin
+  // guardar, se restaura el tema persistido.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", draft.theme);
+    return () => {
+      document.documentElement.setAttribute("data-theme", preferences.theme);
+    };
+  }, [draft.theme, preferences.theme]);
+
   const update = <Key extends keyof MiraLinkPreferences>(
     key: Key,
     value: MiraLinkPreferences[Key],
   ) => setDraft((current) => ({ ...current, [key]: value }));
+
+  const selectTheme = (value: ThemeName) => {
+    const option = themeOptions.find((item) => item.value === value);
+    setDraft((current) => ({
+      ...current,
+      theme: value,
+      high_contrast: option?.highContrast ?? false,
+    }));
+  };
 
   return (
     <main className="settings-page page-container">
@@ -81,6 +99,51 @@ export function SettingsPage({
           solo se aplican cuando los guardas.
         </span>
       </header>
+
+      <section className="settings-panel" aria-label="Accesibilidad">
+        <h2 className="settings-section-title">Accesibilidad</h2>
+        <p className="settings-section-lead">
+          Elige un esquema de color. El tema claro es el predeterminado; los de
+          alto contraste ayudan a leer todo con la máxima claridad.
+        </p>
+        <div className="theme-options" role="radiogroup" aria-label="Esquema de color">
+          {themeOptions.map((option) => {
+            const active = draft.theme === option.value;
+            return (
+              <label
+                key={option.value}
+                className={`theme-option${active ? " theme-option--active" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  className="sr-only"
+                  value={option.value}
+                  checked={active}
+                  onChange={() => selectTheme(option.value)}
+                  aria-label={option.label}
+                />
+                <span className="theme-option__swatch" aria-hidden="true">
+                  {option.swatch.map((color, index) => (
+                    <span key={index} style={{ background: color }} />
+                  ))}
+                </span>
+                <span className="theme-option__text">
+                  <span className="theme-option__name">
+                    {option.label}
+                    {active ? (
+                      <span className="theme-option__check" aria-hidden="true">
+                        ✓
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="theme-option__desc">{option.description}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="settings-panel" aria-label="Preferencias de MiraLink">
         <label className="setting-control setting-control--select">
@@ -150,7 +213,6 @@ export function SettingsPage({
 
         <div className="settings-toggles">
           {[
-            ["high_contrast", "Contraste alto"],
             ["use_pitch_assist", "Usar pitch"],
             ["invert_vertical_axis", "Invertir eje vertical"],
           ].map(([key, label]) => (
@@ -162,10 +224,7 @@ export function SettingsPage({
                 checked={Boolean(draft[key as keyof MiraLinkPreferences])}
                 onChange={(event) =>
                   update(
-                    key as
-                      | "high_contrast"
-                      | "use_pitch_assist"
-                      | "invert_vertical_axis",
+                    key as "use_pitch_assist" | "invert_vertical_axis",
                     event.target.checked,
                   )
                 }

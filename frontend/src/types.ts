@@ -157,6 +157,55 @@ export type SavedForm = {
   last_used_at: string;
 };
 
+export type ThemeName = "light" | "dark" | "hc-yellow" | "hc-amber" | "hc-mono";
+
+export type ThemeOption = {
+  value: ThemeName;
+  label: string;
+  description: string;
+  /** [fondo, acento, texto] para la muestra visual en ajustes. */
+  swatch: [string, string, string];
+  highContrast: boolean;
+};
+
+export const themeOptions: ThemeOption[] = [
+  {
+    value: "light",
+    label: "Claro",
+    description: "Fondo blanco, acentos verdes y texto negro. Recomendado.",
+    swatch: ["#ffffff", "#0b8457", "#0c1a14"],
+    highContrast: false,
+  },
+  {
+    value: "dark",
+    label: "Oscuro",
+    description: "Fondo verde oscuro y texto claro para entornos con poca luz.",
+    swatch: ["#0d1c1f", "#76f1bd", "#f8fbf7"],
+    highContrast: false,
+  },
+  {
+    value: "hc-amber",
+    label: "Negro sobre amarillo",
+    description: "Fondo amarillo intenso con texto negro. Máximo contraste.",
+    swatch: ["#ffe600", "#000000", "#000000"],
+    highContrast: true,
+  },
+  {
+    value: "hc-yellow",
+    label: "Amarillo sobre negro",
+    description: "Fondo negro con texto amarillo. Reduce el brillo de pantalla.",
+    swatch: ["#000000", "#ffff00", "#ffff00"],
+    highContrast: true,
+  },
+  {
+    value: "hc-mono",
+    label: "Blanco y negro",
+    description: "Solo blanco y negro con bordes marcados. Sin color.",
+    swatch: ["#ffffff", "#000000", "#000000"],
+    highContrast: true,
+  },
+];
+
 export type MiraLinkPreferences = {
   language: "es";
   provider_mode: "mediapipe" | "pointer";
@@ -165,6 +214,7 @@ export type MiraLinkPreferences = {
   stabilization: number;
   horizontal_sensitivity: number;
   vertical_sensitivity: number;
+  theme: ThemeName;
   high_contrast: boolean;
   use_pitch_assist: boolean;
   invert_vertical_axis: boolean;
@@ -178,6 +228,7 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   stabilization: 82,
   horizontal_sensitivity: 1.2,
   vertical_sensitivity: 1.2,
+  theme: "light",
   high_contrast: false,
   use_pitch_assist: true,
   invert_vertical_axis: false,

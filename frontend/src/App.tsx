@@ -36,12 +36,14 @@ import {
 import { resolveCalibrationTarget } from "./lib/calibration";
 import {
   defaultMiraLinkPreferences,
+  themeOptions,
   type CalibrationSampleV2,
   type GazeFeatureVector,
   type GazeFrame,
   type GazePoint,
   type MiraLinkPreferences,
   type SavedForm,
+  type ThemeName,
 } from "./types";
 
 const calibrationHoldMs = 2200;
@@ -85,7 +87,7 @@ export default function App() {
     useState<MiraLinkPreferences["provider_mode"]>("mediapipe");
   const [dwellMs, setDwellMs] = useState(3000);
   const [neutralZonePercent, setNeutralZonePercent] = useState(24);
-  const [highContrast, setHighContrast] = useState(false);
+  const [theme, setTheme] = useState<ThemeName>("light");
   const [usePitchAssist, setUsePitchAssist] = useState(true);
   const [invertVerticalAxis, setInvertVerticalAxis] = useState(false);
   const [horizontalSensitivity, setHorizontalSensitivity] = useState(1.2);
@@ -238,6 +240,10 @@ export default function App() {
   useEffect(() => {
     frameRef.current = frame;
   }, [frame]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!correctedPoint) {
@@ -593,7 +599,7 @@ export default function App() {
         setStabilization(preferences.stabilization);
         setHorizontalSensitivity(preferences.horizontal_sensitivity);
         setVerticalSensitivity(preferences.vertical_sensitivity);
-        setHighContrast(preferences.high_contrast);
+        setTheme(preferences.theme ?? "light");
         setUsePitchAssist(preferences.use_pitch_assist);
         setInvertVerticalAxis(preferences.invert_vertical_axis);
       } catch {
@@ -620,13 +626,14 @@ export default function App() {
       stabilization,
       horizontal_sensitivity: horizontalSensitivity,
       vertical_sensitivity: verticalSensitivity,
-      high_contrast: highContrast,
+      theme,
+      high_contrast: themeOptions.find((option) => option.value === theme)?.highContrast ?? false,
       use_pitch_assist: usePitchAssist,
       invert_vertical_axis: invertVerticalAxis,
     }),
     [
       dwellMs,
-      highContrast,
+      theme,
       horizontalSensitivity,
       invertVerticalAxis,
       neutralZonePercent,
@@ -650,7 +657,7 @@ export default function App() {
       setStabilization(saved.stabilization);
       setHorizontalSensitivity(saved.horizontal_sensitivity);
       setVerticalSensitivity(saved.vertical_sensitivity);
-      setHighContrast(saved.high_contrast);
+      setTheme(saved.theme ?? "light");
       setUsePitchAssist(saved.use_pitch_assist);
       setInvertVerticalAxis(saved.invert_vertical_axis);
       setPreferencesSaved(true);
@@ -717,9 +724,7 @@ export default function App() {
 
   return (
     <div
-      className={`app-shell${highContrast ? " app-shell--contrast" : ""}${
-        immersive ? " app-shell--immersive" : ""
-      }`}
+      className={`app-shell${immersive ? " app-shell--immersive" : ""}`}
     >
       {calibrationActive ? (
         <CalibrationOverlay

@@ -16,6 +16,7 @@ class ProfilePreferences(BaseModel):
     stabilization: int = 82
     horizontal_sensitivity: float = 1.2
     vertical_sensitivity: float = 1.2
+    theme: str = "light"
     high_contrast: bool = False
     use_pitch_assist: bool = True
     invert_vertical_axis: bool = False
@@ -52,6 +53,7 @@ class SqliteProfileStore:
                     stabilization INTEGER NOT NULL DEFAULT 82,
                     horizontal_sensitivity REAL NOT NULL DEFAULT 1.2,
                     vertical_sensitivity REAL NOT NULL DEFAULT 1.2,
+                    theme TEXT NOT NULL DEFAULT 'light',
                     high_contrast INTEGER NOT NULL DEFAULT 0,
                     use_pitch_assist INTEGER NOT NULL DEFAULT 1,
                     invert_vertical_axis INTEGER NOT NULL DEFAULT 0
@@ -81,6 +83,7 @@ class SqliteProfileStore:
                 "stabilization": "INTEGER NOT NULL DEFAULT 82",
                 "horizontal_sensitivity": "REAL NOT NULL DEFAULT 1.2",
                 "vertical_sensitivity": "REAL NOT NULL DEFAULT 1.2",
+                "theme": "TEXT NOT NULL DEFAULT 'light'",
                 "use_pitch_assist": "INTEGER NOT NULL DEFAULT 1",
                 "invert_vertical_axis": "INTEGER NOT NULL DEFAULT 0",
             }
@@ -108,9 +111,9 @@ class SqliteProfileStore:
                 INSERT INTO profile_preferences (
                     user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                     stabilization, horizontal_sensitivity, vertical_sensitivity,
-                    high_contrast, use_pitch_assist, invert_vertical_axis
+                    theme, high_contrast, use_pitch_assist, invert_vertical_axis
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -119,6 +122,7 @@ class SqliteProfileStore:
                     stabilization=excluded.stabilization,
                     horizontal_sensitivity=excluded.horizontal_sensitivity,
                     vertical_sensitivity=excluded.vertical_sensitivity,
+                    theme=excluded.theme,
                     high_contrast=excluded.high_contrast,
                     use_pitch_assist=excluded.use_pitch_assist,
                     invert_vertical_axis=excluded.invert_vertical_axis
@@ -132,6 +136,7 @@ class SqliteProfileStore:
                     preferences.stabilization,
                     preferences.horizontal_sensitivity,
                     preferences.vertical_sensitivity,
+                    preferences.theme,
                     int(preferences.high_contrast),
                     int(preferences.use_pitch_assist),
                     int(preferences.invert_vertical_axis),
@@ -146,7 +151,7 @@ class SqliteProfileStore:
                 """
                 SELECT user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                        stabilization, horizontal_sensitivity, vertical_sensitivity,
-                       high_contrast, use_pitch_assist, invert_vertical_axis
+                       theme, high_contrast, use_pitch_assist, invert_vertical_axis
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -172,6 +177,7 @@ class SqliteProfileStore:
                 stabilization=preference_row["stabilization"],
                 horizontal_sensitivity=preference_row["horizontal_sensitivity"],
                 vertical_sensitivity=preference_row["vertical_sensitivity"],
+                theme=preference_row["theme"],
                 high_contrast=bool(preference_row["high_contrast"]),
                 use_pitch_assist=bool(preference_row["use_pitch_assist"]),
                 invert_vertical_axis=bool(preference_row["invert_vertical_axis"]),
