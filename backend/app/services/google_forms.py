@@ -190,42 +190,6 @@ def import_google_form(url: str, client: httpx.Client | None = None) -> Imported
             http_client.close()
 
 
-def submit_google_form(
-    form: ImportedGoogleForm,
-    answers: dict[str, list[str]],
-    client: httpx.Client | None = None,
-) -> GoogleFormSubmitResult:
-    entry_by_question = {question.id: question.entry_id for question in form.questions}
-    payload: list[tuple[str, str]] = []
-
-    for question_id, values in answers.items():
-        entry_id = entry_by_question.get(question_id)
-        if not entry_id:
-            continue
-        for value in values:
-            payload.append((entry_id, value))
-
-    if not payload:
-        raise GoogleFormError("No hay respuestas seleccionadas para enviar.")
-
-    owns_client = client is None
-    http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
-    try:
-        response = http_client.post(
-            form.submit_url,
-            content=urlencode(payload),
-            headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0"},
-        )
-        return GoogleFormSubmitResult(
-            submitted=response.status_code in {200, 302},
-            status_code=response.status_code,
-            message="Formulario enviado." if response.status_code in {200, 302} else "Google Forms rechazo el envio.",
-        )
-    finally:
-        if owns_client:
-            http_client.close()
-
-
 def submit_google_form_by_entries(
     submit_url: str,
     answers: dict[str, list[str]],

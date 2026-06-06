@@ -1,9 +1,6 @@
-import httpx
-
 from app.services.google_forms import (
     extract_form_id,
     import_google_form_from_html,
-    submit_google_form,
 )
 
 
@@ -27,23 +24,3 @@ def test_import_google_form_from_html_maps_supported_questions():
     assert form.questions[0].entry_id == "entry.222"
     assert form.questions[0].type == "checkbox"
     assert [option.label for option in form.questions[0].options] == ["Tengo sed", "Tengo frio"]
-
-
-def test_submit_google_form_posts_entry_values():
-    requests = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(200, text="OK")
-
-    form = import_google_form_from_html("abc123", SAMPLE_HTML)
-    result = submit_google_form(
-        form,
-        {"111": ["Tengo sed"], "333": ["No"]},
-        client=httpx.Client(transport=httpx.MockTransport(handler)),
-    )
-
-    assert result.submitted is True
-    body = requests[0].content.decode()
-    assert "entry.222=Tengo+sed" in body
-    assert "entry.444=No" in body

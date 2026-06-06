@@ -5,8 +5,6 @@ from app.services.form_responses import SqliteFormResponseStore
 from app.services.gemma import BaseGemmaReranker, NoopGemmaReranker, RerankRequest
 from app.services.google_forms import (
     GoogleFormError,
-    GoogleFormOption,
-    GoogleFormQuestion,
     ImportedGoogleForm,
 )
 
@@ -82,60 +80,6 @@ def test_gemma_rerank_endpoint_returns_proxy_response():
     assert payload["provider"] == "fixed"
     assert payload["model"] == "fixed-model"
     assert payload["ordered_candidates"] == ["ayuda", "ahora", "agua"]
-
-
-def test_google_forms_import_endpoint_returns_imported_form(monkeypatch):
-    form = ImportedGoogleForm(
-        form_id="abc123",
-        title="Cuestionario diario",
-        submit_url="https://docs.google.com/forms/d/e/abc123/formResponse",
-        questions=[
-            GoogleFormQuestion(
-                id="q1",
-                entry_id="entry.111",
-                title="Como te encuentras?",
-                type="checkbox",
-                options=[GoogleFormOption(id="q1-0", label="Tengo sed")],
-            )
-        ],
-    )
-    monkeypatch.setattr("app.main.import_google_form", lambda url: form)
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
-
-    response = client.post("/api/google-forms/import", json={"url": "https://docs.google.com/forms/d/e/abc123/viewform"})
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["title"] == "Cuestionario diario"
-    assert payload["questions"][0]["options"][0]["label"] == "Tengo sed"
-
-
-def test_google_forms_submit_endpoint_posts_answers(monkeypatch):
-    form = ImportedGoogleForm(
-        form_id="abc123",
-        title="Cuestionario diario",
-        submit_url="https://docs.google.com/forms/d/e/abc123/formResponse",
-        questions=[
-            GoogleFormQuestion(
-                id="q1",
-                entry_id="entry.111",
-                title="Como te encuentras?",
-                type="checkbox",
-                options=[GoogleFormOption(id="q1-0", label="Tengo sed")],
-            )
-        ],
-    )
-    monkeypatch.setattr("app.main.import_google_form", lambda url: form)
-    monkeypatch.setattr("app.main.submit_google_form", lambda imported_form, answers: {"submitted": True, "status_code": 200, "message": "Formulario enviado."})
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
-
-    response = client.post(
-        "/api/google-forms/submit",
-        json={"url": "https://docs.google.com/forms/d/e/abc123/viewform", "answers": {"q1": ["Tengo sed"]}},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["submitted"] is True
 
 
 def test_generic_forms_import_endpoint_routes_by_url(monkeypatch):
