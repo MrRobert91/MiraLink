@@ -1200,6 +1200,15 @@ input[type="range"] {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/*
+ * Solo el vídeo se espeja por CSS para la vista selfie. El canvas con los
+ * keypoints ya viene espejado por JS en drawGazeOverlay (mirrorPreviewX), así
+ * que aplicarle scaleX(-1) aquí lo invertiría dos veces y los puntos saldrían
+ * en el lado opuesto a la cara. Mismo criterio que en .camera-preview.
+ */
+.calibration-camera-backdrop video {
   transform: scaleX(-1);
 }
 
