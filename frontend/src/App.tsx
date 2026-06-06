@@ -9,7 +9,7 @@ import { GazeDiagnosticsPanel } from "./components/GazeDiagnosticsPanel";
 import { useCameraStream } from "./hooks/useCameraStream";
 import { useDwellSelection } from "./hooks/useDwellSelection";
 import { useGazeProvider } from "./hooks/useGazeProvider";
-import { importGoogleForm, submitGoogleForm } from "./lib/api";
+import { importGoogleForm, submitGoogleForm, getSavedForms, saveForm, deleteSavedForm } from "./lib/api";
 import type { SubmitFormPayload } from "./lib/api";
 import { resolveBinaryDecisionTarget } from "./lib/decisionZone";
 import { createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
@@ -25,7 +25,7 @@ import {
 } from "./lib/gazeCalibrationV2";
 import { resolveCalibrationTarget } from "./lib/calibration";
 import type { ProviderMode } from "./lib/gazeProvider";
-import type { CalibrationSampleV2, GazeFeatureVector, GazeFrame, GazePoint } from "./types";
+import type { CalibrationSampleV2, GazeFeatureVector, GazeFrame, GazePoint, SavedForm } from "./types";
 
 const calibrationHoldMs = 2200;
 const calibrationMinPointMs = 1400;
@@ -79,6 +79,7 @@ export default function App() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [formStartedAt, setFormStartedAt] = useState<number | null>(null);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [savedForms, setSavedForms] = useState<SavedForm[]>([]);
   const [calibrationActive, setCalibrationActive] = useState(false);
   const [calibrationIndex, setCalibrationIndex] = useState(0);
   const [calibrationSamples, setCalibrationSamples] = useState<CalibrationSampleV2[]>([]);
@@ -285,6 +286,12 @@ export default function App() {
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       resetDwell();
       setStatusMessage(`Formulario importado: ${importedForm.title}.`);
+      try {
+        const updated = await saveForm({ form_id: importedForm.form_id, form_title: importedForm.title, form_url: trimmedUrl, provider: importedForm.provider });
+        setSavedForms(updated);
+      } catch {
+        // don't fail import if saving fails
+      }
     } catch {
       setImportError("No se pudo importar el formulario. Debe ser publico, de Google/Microsoft Forms y tener opciones multiples o casillas.");
       setStatusMessage("Importacion fallida.");
@@ -292,6 +299,74 @@ export default function App() {
       setImportingForm(false);
     }
   }, [formUrl, resetDwell]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const forms = await getSavedForms();
+        if (cancelled) return;
+        setSavedForms(forms);
+        if (forms.length > 0) {
+          const last = forms[0];
+          setFormUrl(last.form_url);
+          setImportingForm(true);
+          try {
+            const importedForm = await importGoogleForm(last.form_url);
+            if (cancelled) return;
+            setActiveFormUrl(last.form_url);
+            setFormStartedAt(Date.now());
+            dispatchFormFlow({ type: "loadForm", form: importedForm });
+            setStatusMessage(`Formulario cargado automaticamente: ${importedForm.title}.`);
+          } catch {
+            // silently skip auto-import if form is no longer accessible
+          } finally {
+            if (!cancelled) setImportingForm(false);
+          }
+        }
+      } catch {
+        // backend not available yet — ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLoadSavedForm = useCallback(async (url: string) => {
+    setFormUrl(url);
+    setImportingForm(true);
+    setImportError(null);
+    setSubmitMessage(null);
+    setStatusMessage("Cargando formulario guardado...");
+    try {
+      const importedForm = await importGoogleForm(url);
+      setActiveFormUrl(url);
+      setFormStartedAt(Date.now());
+      dispatchFormFlow({ type: "loadForm", form: importedForm });
+      resetDwell();
+      setStatusMessage(`Formulario cargado: ${importedForm.title}.`);
+      try {
+        const updated = await saveForm({ form_id: importedForm.form_id, form_title: importedForm.title, form_url: url, provider: importedForm.provider });
+        setSavedForms(updated);
+      } catch {
+        // ignore
+      }
+    } catch {
+      setImportError("No se pudo cargar el formulario guardado.");
+      setStatusMessage("Carga fallida.");
+    } finally {
+      setImportingForm(false);
+    }
+  }, [resetDwell]);
+
+  const handleDeleteSavedForm = useCallback(async (url: string) => {
+    try {
+      await deleteSavedForm(url);
+      setSavedForms((prev) => prev.filter((f) => f.form_url !== url));
+    } catch {
+      // silently ignore
+    }
+  }, []);
 
   const handleSubmitForm = useCallback(async () => {
     if (!formFlow.form || !activeFormUrl) {
@@ -624,8 +699,11 @@ export default function App() {
             formUrl={formUrl}
             importing={importingForm}
             error={importError}
+            savedForms={savedForms}
             onUrlChange={setFormUrl}
             onImport={handleImportForm}
+            onLoadSaved={handleLoadSavedForm}
+            onDeleteSaved={handleDeleteSavedForm}
           />
           <BinaryFormPanel
             form={formFlow.form}

@@ -1,4 +1,4 @@
-import type { FormSubmissionDetail, FormSubmissionSummary, GoogleFormSubmitResponse, ImportedForm } from "../types";
+import type { FormSubmissionDetail, FormSubmissionSummary, GoogleFormSubmitResponse, ImportedForm, SavedForm } from "../types";
 
 type RuntimeAppConfig = {
   VITE_API_BASE_URL?: string;
@@ -96,4 +96,33 @@ export function exportSubmissionsCsv(ids?: string[]): void {
   anchor.href = url;
   anchor.download = "respuestas.csv";
   anchor.click();
+}
+
+export type SaveFormPayload = {
+  form_id: string;
+  form_title: string;
+  form_url: string;
+  provider: string;
+};
+
+export async function getSavedForms(): Promise<SavedForm[]> {
+  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/saved"));
+  return parseJson<SavedForm[]>(response);
+}
+
+export async function saveForm(payload: SaveFormPayload): Promise<SavedForm[]> {
+  const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/saved"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJson<SavedForm[]>(response);
+}
+
+export async function deleteSavedForm(url: string): Promise<void> {
+  const response = await fetch(
+    buildApiUrl(apiBaseUrl, `/api/forms/saved?url=${encodeURIComponent(url)}`),
+    { method: "DELETE" },
+  );
+  if (!response.ok) throw new Error(`Error ${response.status}`);
 }

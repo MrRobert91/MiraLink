@@ -55,6 +55,13 @@ class GoogleFormSubmitRequest(BaseModel):
     duration_seconds: float | None = None
 
 
+class SaveFormRequest(BaseModel):
+    form_id: str
+    form_title: str
+    form_url: str
+    provider: str
+
+
 def build_default_engine() -> SuggestionEngine:
     engine = SuggestionEngine(
         global_phrases=[
@@ -298,6 +305,24 @@ def create_app(
         if record is None:
             raise HTTPException(status_code=404, detail="Envio no encontrado.")
         return record
+
+    @app.get("/api/forms/saved")
+    def list_saved_forms():
+        return responses.list_saved_forms()
+
+    @app.post("/api/forms/saved")
+    def save_form_endpoint(payload: SaveFormRequest):
+        return responses.save_form(
+            form_id=payload.form_id,
+            form_title=payload.form_title,
+            form_url=payload.form_url,
+            provider=payload.provider,
+        )
+
+    @app.delete("/api/forms/saved")
+    def delete_saved_form_endpoint(url: str):
+        responses.delete_saved_form(url)
+        return {"ok": True}
 
     return app
 

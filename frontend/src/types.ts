@@ -140,3 +140,13 @@ export type FormSubmissionSummary = {
 export type FormSubmissionDetail = FormSubmissionSummary & {
   answers: FormAnswerRecord[];
 };
+
+export type SavedForm = {
+  id: number;
+  form_id: string;
+  form_title: string;
+  form_url: string;
+  provider: string;
+  saved_at: string;
+  last_used_at: string;
+};

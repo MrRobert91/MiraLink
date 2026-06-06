@@ -46,6 +46,17 @@ class SqliteFormResponseStore:
                     ON form_answers(submission_id);
                 CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id
                     ON form_submissions(form_id);
+                CREATE TABLE IF NOT EXISTS saved_forms (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    form_id TEXT NOT NULL,
+                    form_title TEXT NOT NULL,
+                    form_url TEXT NOT NULL UNIQUE,
+                    provider TEXT NOT NULL,
+                    saved_at TEXT NOT NULL,
+                    last_used_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_saved_forms_last_used
+                    ON saved_forms(last_used_at DESC);
                 """
             )
 
@@ -199,3 +210,36 @@ class SqliteFormResponseStore:
             writer.writerow(row_data)
 
         return output.getvalue()
+
+    def save_form(
+        self,
+        *,
+        form_id: str,
+        form_title: str,
+        form_url: str,
+        provider: str,
+    ) -> list[dict]:
+        now = datetime.now(UTC).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO saved_forms (form_id, form_title, form_url, provider, saved_at, last_used_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(form_url) DO UPDATE SET
+                    form_title = excluded.form_title,
+                    last_used_at = excluded.last_used_at
+                """,
+                (form_id, form_title, form_url, provider, now, now),
+            )
+        return self.list_saved_forms()
+
+    def list_saved_forms(self) -> list[dict]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id, form_id, form_title, form_url, provider, saved_at, last_used_at FROM saved_forms ORDER BY last_used_at DESC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_saved_form(self, form_url: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM saved_forms WHERE form_url = ?", (form_url,))
