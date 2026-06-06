@@ -68,6 +68,7 @@ export type FormQuestionMetaPayload = {
 };
 
 export type SubmitFormPayload = {
+  submission_id?: string;
   url: string;
   submit_url: string;
   answers: Record<string, string[]>;

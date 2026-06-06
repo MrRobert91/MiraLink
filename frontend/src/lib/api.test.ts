@@ -1,4 +1,4 @@
-import { buildApiUrl, getProfile, updateProfile } from "./api";
+import { buildApiUrl, getProfile, submitGoogleForm, updateProfile } from "./api";
 import { defaultMiraLinkPreferences } from "../types";
 
 describe("api url builder", () => {
@@ -66,6 +66,41 @@ describe("api url builder", () => {
         method: "PUT",
         body: JSON.stringify(preferences),
       }),
+    );
+  });
+
+  it("sends the local submission id when retrying a form", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          submission_id: "submission-1",
+          saved: true,
+          submitted: false,
+          status_code: 503,
+          message: "Respuestas guardadas localmente.",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const payload = {
+      submission_id: "submission-1",
+      url: "https://forms.office.com/r/test",
+      submit_url: "https://forms.office.com/api/submit",
+      answers: { q1: ["No"] },
+      form_id: "test",
+      form_title: "Formulario",
+      provider: "microsoft",
+      questions: [{ entry_id: "q1", title: "Respuesta", type: "radio" }],
+      duration_seconds: 5,
+    };
+
+    const result = await submitGoogleForm(payload);
+
+    expect(result.saved).toBe(true);
+    expect(result.submission_id).toBe("submission-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/forms/submit"),
+      expect.objectContaining({ body: JSON.stringify(payload) }),
     );
   });
 });

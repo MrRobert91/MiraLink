@@ -96,6 +96,7 @@ export default function App() {
   const [importError, setImportError] = useState<string | null>(null);
   const [submittingForm, setSubmittingForm] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [formSubmissionId, setFormSubmissionId] = useState<string | null>(null);
   const [formStartedAt, setFormStartedAt] = useState<number | null>(null);
   const [savedForms, setSavedForms] = useState<SavedForm[]>([]);
   const [preferencesReady, setPreferencesReady] = useState(false);
@@ -291,6 +292,7 @@ export default function App() {
     try {
       const importedForm = await importGoogleForm(trimmedUrl);
       setActiveFormUrl(trimmedUrl);
+      setFormSubmissionId(null);
       setFormStartedAt(Date.now());
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       dispatchFormFlow({ type: "openCalibrationChoice" });
@@ -334,6 +336,7 @@ export default function App() {
     try {
       const importedForm = await importGoogleForm(url);
       setActiveFormUrl(url);
+      setFormSubmissionId(null);
       setFormStartedAt(Date.now());
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       dispatchFormFlow({ type: "openCalibrationChoice" });
@@ -374,6 +377,7 @@ export default function App() {
     const durationSeconds = formStartedAt != null ? (Date.now() - formStartedAt) / 1000 : null;
 
     const payload: SubmitFormPayload = {
+      ...(formSubmissionId ? { submission_id: formSubmissionId } : {}),
       url: activeFormUrl,
       submit_url: formFlow.form.submit_url,
       answers: formFlow.answers,
@@ -390,6 +394,7 @@ export default function App() {
 
     try {
       const response = await submitGoogleForm(payload);
+      setFormSubmissionId(response.submission_id);
       setSubmitMessage(response.message);
       if (response.submitted) {
         dispatchFormFlow({ type: "markSubmitted" });
@@ -402,12 +407,13 @@ export default function App() {
     } finally {
       setSubmittingForm(false);
     }
-  }, [activeFormUrl, formFlow.answers, formFlow.form, formStartedAt]);
+  }, [activeFormUrl, formFlow.answers, formFlow.form, formStartedAt, formSubmissionId]);
 
   const handleResetForm = useCallback(() => {
     dispatchFormFlow({ type: "reset" });
     setFormUrl("");
     setActiveFormUrl("");
+    setFormSubmissionId(null);
     setImportError(null);
     setSubmitMessage(null);
     setStatusMessage("Formulario reiniciado.");

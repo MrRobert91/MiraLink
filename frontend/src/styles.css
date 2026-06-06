@@ -430,6 +430,22 @@ button, input, select { font: inherit; }
 .admin-badge--google { background: rgba(66, 133, 244, 0.2); color: #7cb4ff; }
 .admin-badge--microsoft { background: rgba(0, 120, 215, 0.2); color: #6bbeff; }
 .admin-badge--unknown { background: rgba(255, 255, 255, 0.1); color: var(--muted); }
+.admin-delivery {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.admin-delivery--sent { background: rgba(44, 190, 120, 0.18); color: #66d9a0; }
+.admin-delivery--failed { background: rgba(255, 92, 92, 0.18); color: #ff9292; }
+.admin-delivery--pending { background: rgba(255, 190, 70, 0.18); color: #ffd078; }
+.admin-delivery--unknown { background: rgba(255, 255, 255, 0.1); color: var(--muted); }
+.admin-delivery-message {
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+}
 
 .admin-row-detail td {
   padding: 0;

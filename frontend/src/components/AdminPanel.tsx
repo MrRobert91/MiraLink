@@ -47,6 +47,24 @@ function AnswerDetail({ answers }: { answers: FormAnswerRecord[] }) {
   );
 }
 
+const deliveryLabels: Record<FormSubmissionSummary["external_status"], string> = {
+  sent: "Enviado",
+  failed: "Fallido",
+  pending: "Pendiente",
+  unknown: "Desconocido",
+};
+
+function DeliveryStatus({ submission }: { submission: FormSubmissionSummary }) {
+  return (
+    <span
+      className={`admin-delivery admin-delivery--${submission.external_status}`}
+      title={submission.external_message ?? undefined}
+    >
+      {deliveryLabels[submission.external_status]}
+    </span>
+  );
+}
+
 type RowProps = {
   submission: FormSubmissionSummary;
   selected: boolean;
@@ -88,6 +106,9 @@ function SubmissionRow({ submission, selected, onToggle }: RowProps) {
         <td>
           <span className={`admin-badge admin-badge--${submission.provider}`}>{submission.provider}</span>
         </td>
+        <td>
+          <DeliveryStatus submission={submission} />
+        </td>
         <td>{formatDate(submission.submitted_at)}</td>
         <td>{formatDuration(submission.duration_seconds)}</td>
         <td>{submission.answer_count}</td>
@@ -107,11 +128,16 @@ function SubmissionRow({ submission, selected, onToggle }: RowProps) {
       </tr>
       {expanded ? (
         <tr className="admin-row-detail">
-          <td colSpan={7}>
+          <td colSpan={8}>
             {loadingDetail ? (
               <p className="admin-loading">Cargando respuestas...</p>
             ) : detail ? (
-              <AnswerDetail answers={detail.answers} />
+              <>
+                {detail.external_message ? (
+                  <p className="admin-delivery-message">{detail.external_message}</p>
+                ) : null}
+                <AnswerDetail answers={detail.answers} />
+              </>
             ) : (
               <p className="admin-loading">No se pudieron cargar las respuestas.</p>
             )}
@@ -258,6 +284,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 </th>
                 <th>Formulario</th>
                 <th>Proveedor</th>
+                <th>Estado externo</th>
                 <th>Enviado el</th>
                 <th>Duracion</th>
                 <th>Preguntas</th>

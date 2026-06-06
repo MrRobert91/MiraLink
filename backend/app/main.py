@@ -47,6 +47,7 @@ class FormQuestionMeta(BaseModel):
 class GoogleFormSubmitRequest(BaseModel):
     url: str
     submit_url: str = ""
+    submission_id: str = ""
     answers: dict[str, list[str]]
     form_id: str = ""
     form_title: str = ""
@@ -262,34 +263,72 @@ def create_app(
             if values
         ]
 
-        def _persist() -> None:
-            if not answer_records:
-                return
-            try:
-                responses.record_submission(
-                    form_id=payload.form_id or payload.url,
-                    form_title=payload.form_title or "Sin titulo",
-                    form_url=payload.url,
-                    provider=payload.provider or "unknown",
-                    duration_seconds=payload.duration_seconds,
-                    answers=answer_records,
-                )
-            except Exception:
-                pass
+        submission_id = responses.record_submission(
+            submission_id=payload.submission_id or None,
+            form_id=payload.form_id or payload.url,
+            form_title=payload.form_title or "Sin titulo",
+            form_url=payload.url,
+            provider=payload.provider or "unknown",
+            duration_seconds=payload.duration_seconds,
+            answers=answer_records,
+        )
 
         try:
             result = submit_external_form(payload.url, payload.submit_url, payload.answers)
         except GoogleFormError as exc:
             logger.warning("submit form_error url=%s answers_keys=%s error=%s", payload.url, list(payload.answers.keys()), exc)
-            _persist()
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            message = f"Respuestas guardadas localmente. No se pudo enviar el formulario: {exc}"
+            responses.update_external_status(
+                submission_id,
+                status="failed",
+                status_code=None,
+                message=message,
+            )
+            return {
+                "submission_id": submission_id,
+                "saved": True,
+                "submitted": False,
+                "status_code": None,
+                "message": message,
+            }
         except Exception as exc:
             logger.exception("submit unexpected_error url=%s", payload.url)
-            _persist()
-            raise HTTPException(status_code=502, detail="No se pudo enviar el formulario.") from exc
+            message = "Respuestas guardadas localmente. No se pudo enviar el formulario."
+            responses.update_external_status(
+                submission_id,
+                status="failed",
+                status_code=None,
+                message=message,
+            )
+            return {
+                "submission_id": submission_id,
+                "saved": True,
+                "submitted": False,
+                "status_code": None,
+                "message": message,
+            }
 
-        _persist()
-        return result
+        submitted = result["submitted"] if isinstance(result, dict) else result.submitted
+        status_code = result["status_code"] if isinstance(result, dict) else result.status_code
+        provider_message = result["message"] if isinstance(result, dict) else result.message
+        message = (
+            provider_message
+            if submitted
+            else f"Respuestas guardadas localmente. {provider_message}"
+        )
+        responses.update_external_status(
+            submission_id,
+            status="sent" if submitted else "failed",
+            status_code=status_code,
+            message=message,
+        )
+        return {
+            "submission_id": submission_id,
+            "saved": True,
+            "submitted": submitted,
+            "status_code": status_code,
+            "message": message,
+        }
 
     @app.get("/api/admin/submissions")
     def list_submissions():

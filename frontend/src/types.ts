@@ -114,8 +114,10 @@ export type DecisionStep = {
 };
 
 export type GoogleFormSubmitResponse = {
+  submission_id: string;
+  saved: boolean;
   submitted: boolean;
-  status_code: number;
+  status_code: number | null;
   message: string;
 };
 
@@ -135,6 +137,10 @@ export type FormSubmissionSummary = {
   submitted_at: string;
   duration_seconds: number | null;
   answer_count: number;
+  external_status: "pending" | "sent" | "failed" | "unknown";
+  external_status_code: number | null;
+  external_message: string | null;
+  external_attempted_at: string | null;
 };
 
 export type FormSubmissionDetail = FormSubmissionSummary & {
