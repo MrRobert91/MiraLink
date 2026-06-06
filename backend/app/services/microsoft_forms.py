@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse, urlunparse
 
@@ -153,10 +154,16 @@ def _post_microsoft_answers(
 ) -> httpx.Response:
     safe_url = _safe_log_url(submit_url)
     logger.info("ms_forms submit POST url=%s payload_questions=%d", safe_url, len(selected_answers))
+    submitted_at = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    payload = {
+        "startDate": submitted_at,
+        "submitDate": submitted_at,
+        "answers": json.dumps(selected_answers, ensure_ascii=False, separators=(",", ":")),
+    }
     try:
         response = http_client.post(
             submit_url,
-            json={"answers": selected_answers},
+            json=payload,
             headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
         )
     except httpx.TimeoutException as exc:
@@ -491,7 +498,7 @@ def submit_microsoft_form(
         )
 
     selected_answers = [
-        {"questionId": question_id, "answers": values}
+        {"questionId": question_id, "answer1": ";".join(values)}
         for question_id, values in answers.items()
         if values
     ]
@@ -535,7 +542,7 @@ def submit_microsoft_form_by_entries(
         )
 
     selected_answers = [
-        {"questionId": question_id, "answers": values}
+        {"questionId": question_id, "answer1": ";".join(values)}
         for question_id, values in answers.items()
         if values
     ]

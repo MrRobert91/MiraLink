@@ -1,4 +1,6 @@
 import logging
+import json
+from datetime import datetime
 
 import httpx
 import pytest
@@ -195,6 +197,31 @@ def test_submit_microsoft_form_posts_answer_payload():
     body = requests[0].content.decode()
     assert "Tengo sed" in body
     assert "No" in body
+
+
+def test_submit_microsoft_form_uses_microsoft_response_contract():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(201, json={"id": 1})
+
+    result = submit_microsoft_form_by_entries(
+        "https://forms.office.com/formapi/api/demo/responses",
+        {"q1": ["Tengo sed"], "q2": ["No"], "q3": ["Opcion A", "Opcion B"]},
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert result.submitted is True
+    payload = json.loads(requests[0].content)
+    assert isinstance(payload["answers"], str)
+    assert json.loads(payload["answers"]) == [
+        {"questionId": "q1", "answer1": "Tengo sed"},
+        {"questionId": "q2", "answer1": "No"},
+        {"questionId": "q3", "answer1": "Opcion A;Opcion B"},
+    ]
+    assert datetime.fromisoformat(payload["startDate"].replace("Z", "+00:00"))
+    assert datetime.fromisoformat(payload["submitDate"].replace("Z", "+00:00"))
 
 
 def test_submit_microsoft_form_logs_json_rejection_reason_and_safe_metadata(caplog):
