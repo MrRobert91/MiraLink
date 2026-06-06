@@ -1,4 +1,7 @@
+import logging
+
 import httpx
+import pytest
 
 from app.services.microsoft_forms import (
     extract_microsoft_form_id,
@@ -6,6 +9,7 @@ from app.services.microsoft_forms import (
     import_microsoft_form_from_html,
     import_microsoft_form_from_runtime_json,
     submit_microsoft_form,
+    submit_microsoft_form_by_entries,
 )
 
 
@@ -191,3 +195,121 @@ def test_submit_microsoft_form_posts_answer_payload():
     body = requests[0].content.decode()
     assert "Tengo sed" in body
     assert "No" in body
+
+
+def test_submit_microsoft_form_logs_json_rejection_reason_and_safe_metadata(caplog):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={"error": {"code": "AccessDenied", "message": "Anyone can respond is disabled"}},
+            headers={
+                "content-type": "application/json",
+                "request-id": "request-123",
+                "x-ms-correlation-request-id": "correlation-456",
+                "set-cookie": "secret-cookie",
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.WARNING, logger="app.services.microsoft_forms"):
+        result = submit_microsoft_form_by_entries(
+            "https://forms.office.com/formapi/api/demo/responses?token=secret-token",
+            {"q1": ["private answer"]},
+            client=client,
+        )
+
+    assert result.submitted is False
+    log_text = caplog.text
+    assert "status=403" in log_text
+    assert "reason='AccessDenied: Anyone can respond is disabled'" in log_text
+    assert "url=https://forms.office.com/formapi/api/demo/responses" in log_text
+    assert "content_type='application/json'" in log_text
+    assert "request_id='request-123'" in log_text
+    assert "correlation_id='correlation-456'" in log_text
+    assert "secret-token" not in log_text
+    assert "private answer" not in log_text
+    assert "secret-cookie" not in log_text
+
+
+def test_submit_microsoft_form_logs_sanitized_truncated_text_rejection(caplog):
+    response_body = (
+        "<html><body>Request rejected for user@example.com "
+        "token=super-secret&sig=hidden-value "
+        + ("x" * 1400)
+        + "</body></html>"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, text=response_body, headers={"content-type": "text/html; charset=utf-8"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.WARNING, logger="app.services.microsoft_forms"):
+        result = submit_microsoft_form_by_entries(
+            "https://forms.office.com/formapi/api/demo/responses",
+            {"q1": ["private answer"]},
+            client=client,
+        )
+
+    assert result.submitted is False
+    log_text = caplog.text
+    assert "status=400" in log_text
+    assert "user@example.com" not in log_text
+    assert "super-secret" not in log_text
+    assert "hidden-value" not in log_text
+    assert "private answer" not in log_text
+    assert "[redacted-email]" in log_text
+    assert "[redacted]" in log_text
+    assert "[truncated]" in log_text
+
+
+def test_submit_microsoft_form_logs_when_rejection_has_no_reason(caplog):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, content=b"", headers={"content-type": "application/json"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.WARNING, logger="app.services.microsoft_forms"):
+        result = submit_microsoft_form_by_entries(
+            "https://forms.office.com/formapi/api/demo/responses",
+            {"q1": ["No"]},
+            client=client,
+        )
+
+    assert result.submitted is False
+    assert "status=429" in caplog.text
+    assert "reason='Microsoft did not provide a rejection reason'" in caplog.text
+    assert "body_preview=''" in caplog.text
+
+
+def test_submit_microsoft_form_logs_timeout_without_answers(caplog):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out while sending private answer", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.WARNING, logger="app.services.microsoft_forms"):
+        with pytest.raises(httpx.ReadTimeout):
+            submit_microsoft_form_by_entries(
+                "https://forms.office.com/formapi/api/demo/responses?token=secret-token",
+                {"q1": ["private answer"]},
+                client=client,
+            )
+
+    assert "transport_error=ReadTimeout" in caplog.text
+    assert "url=https://forms.office.com/formapi/api/demo/responses" in caplog.text
+    assert "secret-token" not in caplog.text
+    assert "private answer" not in caplog.text
+
+
+def test_submit_microsoft_form_success_does_not_log_warning(caplog):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(204)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.WARNING, logger="app.services.microsoft_forms"):
+        result = submit_microsoft_form_by_entries(
+            "https://forms.office.com/formapi/api/demo/responses",
+            {"q1": ["No"]},
+            client=client,
+        )
+
+    assert result.submitted is True
+    assert not caplog.records

@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 import httpx
 
@@ -20,6 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 MICROSOFT_FORM_HOSTS = {"forms.office.com", "forms.cloud.microsoft"}
+MICROSOFT_SUCCESS_STATUS_CODES = {200, 201, 202, 204}
+_LOG_BODY_LIMIT = 1024
+_ERROR_TEXT_KEYS = ("message", "detail", "title", "error_description", "description")
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+_SENSITIVE_PAIR_RE = re.compile(
+    r"(?i)\b(token|sig|signature|auth|authorization|api[_-]?key|secret)=([^&\s\"'<>]+)"
+)
+_BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Z0-9._~+/=-]+")
 
 
 def extract_microsoft_form_id(url: str) -> str:
@@ -39,6 +48,130 @@ def extract_microsoft_form_id(url: str) -> str:
             return value[0]
 
     raise GoogleFormError("No se pudo extraer el identificador del formulario de Microsoft Forms.")
+
+
+def _safe_log_url(url: str) -> str:
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _sanitize_log_text(value: str) -> str:
+    sanitized = _EMAIL_RE.sub("[redacted-email]", value)
+    sanitized = _SENSITIVE_PAIR_RE.sub(lambda match: f"{match.group(1)}=[redacted]", sanitized)
+    sanitized = _BEARER_RE.sub("Bearer [redacted]", sanitized)
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
+    return sanitized
+
+
+def _truncate_log_text(value: str) -> str:
+    if len(value) <= _LOG_BODY_LIMIT:
+        return value
+    return f"{value[:_LOG_BODY_LIMIT]} [truncated]"
+
+
+def _find_error_text(data: Any) -> str | None:
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            message = next(
+                (error.get(key) for key in _ERROR_TEXT_KEYS if isinstance(error.get(key), str) and error.get(key).strip()),
+                None,
+            )
+            if isinstance(code, str) and code.strip() and message:
+                return f"{code.strip()}: {message.strip()}"
+            if message:
+                return message.strip()
+            if isinstance(code, str) and code.strip():
+                return code.strip()
+        elif isinstance(error, str) and error.strip():
+            return error.strip()
+
+        code = data.get("code")
+        message = next(
+            (data.get(key) for key in _ERROR_TEXT_KEYS if isinstance(data.get(key), str) and data.get(key).strip()),
+            None,
+        )
+        if isinstance(code, str) and code.strip() and message:
+            return f"{code.strip()}: {message.strip()}"
+        if message:
+            return message.strip()
+
+        for value in data.values():
+            nested = _find_error_text(value)
+            if nested:
+                return nested
+    elif isinstance(data, list):
+        for value in data:
+            nested = _find_error_text(value)
+            if nested:
+                return nested
+    return None
+
+
+def _rejection_details(response: httpx.Response) -> tuple[str, str]:
+    raw_body = response.text
+    reason: str | None = None
+    try:
+        payload = response.json()
+    except (json.JSONDecodeError, ValueError):
+        payload = None
+    if payload is not None:
+        reason = _find_error_text(payload)
+        preview_source = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    else:
+        preview_source = _HTML_TAG_RE.sub(" ", raw_body)
+        reason = preview_source.strip() or None
+
+    safe_preview = _truncate_log_text(_sanitize_log_text(preview_source))
+    safe_reason = _truncate_log_text(_sanitize_log_text(reason)) if reason else "Microsoft did not provide a rejection reason"
+    return safe_reason, safe_preview
+
+
+def _log_microsoft_rejection(response: httpx.Response, submit_url: str) -> None:
+    reason, body_preview = _rejection_details(response)
+    headers = response.headers
+    request_id = headers.get("request-id") or headers.get("x-ms-request-id")
+    correlation_id = headers.get("x-ms-correlation-request-id") or headers.get("client-request-id")
+    logger.warning(
+        "ms_forms submit rejected status=%d reason=%r url=%s content_type=%r "
+        "request_id=%r correlation_id=%r body_preview=%r",
+        response.status_code,
+        reason,
+        _safe_log_url(str(response.url) if response.url else submit_url),
+        headers.get("content-type", ""),
+        request_id,
+        correlation_id,
+        body_preview,
+    )
+
+
+def _post_microsoft_answers(
+    submit_url: str,
+    selected_answers: list[dict[str, Any]],
+    http_client: httpx.Client,
+) -> httpx.Response:
+    safe_url = _safe_log_url(submit_url)
+    logger.info("ms_forms submit POST url=%s payload_questions=%d", safe_url, len(selected_answers))
+    try:
+        response = http_client.post(
+            submit_url,
+            json={"answers": selected_answers},
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+        )
+    except httpx.TimeoutException as exc:
+        logger.warning("ms_forms submit transport_error=%s url=%s", type(exc).__name__, safe_url)
+        raise
+    except httpx.NetworkError as exc:
+        logger.warning("ms_forms submit transport_error=%s url=%s", type(exc).__name__, safe_url)
+        raise
+    except httpx.RequestError as exc:
+        logger.warning("ms_forms submit transport_error=%s url=%s", type(exc).__name__, safe_url)
+        raise
+
+    if response.status_code not in MICROSOFT_SUCCESS_STATUS_CODES:
+        _log_microsoft_rejection(response, submit_url)
+    return response
 
 
 def _extract_json_values(html: str) -> list[Any]:
@@ -368,15 +501,13 @@ def submit_microsoft_form(
     owns_client = client is None
     http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
     try:
-        response = http_client.post(
-            form.submit_url,
-            json={"answers": selected_answers},
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-        )
+        response = _post_microsoft_answers(form.submit_url, selected_answers, http_client)
         return GoogleFormSubmitResult(
-            submitted=response.status_code in {200, 201, 202, 204},
+            submitted=response.status_code in MICROSOFT_SUCCESS_STATUS_CODES,
             status_code=response.status_code,
-            message="Formulario enviado." if response.status_code in {200, 201, 202, 204} else "Microsoft Forms rechazo el envio.",
+            message="Formulario enviado."
+            if response.status_code in MICROSOFT_SUCCESS_STATUS_CODES
+            else "Microsoft Forms rechazo el envio.",
         )
     finally:
         if owns_client:
@@ -388,7 +519,11 @@ def submit_microsoft_form_by_entries(
     answers: dict[str, list[str]],
     client: httpx.Client | None = None,
 ) -> GoogleFormSubmitResult:
-    logger.info("ms_forms submit start submit_url=%r answer_keys=%s", submit_url, list(answers.keys()))
+    logger.info(
+        "ms_forms submit start submit_url=%s answer_count=%d",
+        _safe_log_url(submit_url),
+        sum(bool(values) for values in answers.values()),
+    )
     if not submit_url:
         logger.error(
             "ms_forms submit FAILED: submit_url is empty. "
@@ -410,17 +545,13 @@ def submit_microsoft_form_by_entries(
     owns_client = client is None
     http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
     try:
-        logger.info("ms_forms submit POST url=%s payload_questions=%d", submit_url, len(selected_answers))
-        response = http_client.post(
-            submit_url,
-            json={"answers": selected_answers},
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-        )
-        logger.info("ms_forms submit response status=%d body_preview=%r", response.status_code, response.text[:300])
+        response = _post_microsoft_answers(submit_url, selected_answers, http_client)
         return GoogleFormSubmitResult(
-            submitted=response.status_code in {200, 201, 202, 204},
+            submitted=response.status_code in MICROSOFT_SUCCESS_STATUS_CODES,
             status_code=response.status_code,
-            message="Formulario enviado." if response.status_code in {200, 201, 202, 204} else "Microsoft Forms rechazo el envio.",
+            message="Formulario enviado."
+            if response.status_code in MICROSOFT_SUCCESS_STATUS_CODES
+            else "Microsoft Forms rechazo el envio.",
         )
     finally:
         if owns_client:
