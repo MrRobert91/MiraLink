@@ -292,3 +292,40 @@ def submit_microsoft_form(
     finally:
         if owns_client:
             http_client.close()
+
+
+def submit_microsoft_form_by_entries(
+    submit_url: str,
+    answers: dict[str, list[str]],
+    client: httpx.Client | None = None,
+) -> GoogleFormSubmitResult:
+    if not submit_url:
+        raise GoogleFormError(
+            "Microsoft Forms no expuso un endpoint de envio publico en esta URL. "
+            "Prueba con un formulario publico 'Anyone can respond'."
+        )
+
+    selected_answers = [
+        {"questionId": question_id, "answers": values}
+        for question_id, values in answers.items()
+        if values
+    ]
+    if not selected_answers:
+        raise GoogleFormError("No hay respuestas seleccionadas para enviar.")
+
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
+    try:
+        response = http_client.post(
+            submit_url,
+            json={"answers": selected_answers},
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+        )
+        return GoogleFormSubmitResult(
+            submitted=response.status_code in {200, 201, 202, 204},
+            status_code=response.status_code,
+            message="Formulario enviado." if response.status_code in {200, 201, 202, 204} else "Microsoft Forms rechazo el envio.",
+        )
+    finally:
+        if owns_client:
+            http_client.close()

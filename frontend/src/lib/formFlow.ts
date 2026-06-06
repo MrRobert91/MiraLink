@@ -75,7 +75,7 @@ function recordYesAndAdvance(state: FormFlowState): FormFlowState {
     return state;
   }
 
-  const currentAnswers = state.answers[step.questionId] ?? [];
+  const currentAnswers = state.answers[step.entryId] ?? [];
   const nextQuestionAnswers =
     step.questionType === "radio"
       ? [step.optionLabel]
@@ -85,7 +85,7 @@ function recordYesAndAdvance(state: FormFlowState): FormFlowState {
     ...state,
     answers: {
       ...state.answers,
-      [step.questionId]: nextQuestionAnswers,
+      [step.entryId]: nextQuestionAnswers,
     },
   };
 

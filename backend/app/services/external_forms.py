@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from app.services.google_forms import GoogleFormError, import_google_form, submit_google_form
-from app.services.microsoft_forms import MICROSOFT_FORM_HOSTS, import_microsoft_form, submit_microsoft_form
+from app.services.google_forms import GoogleFormError, import_google_form, submit_google_form_by_entries
+from app.services.microsoft_forms import MICROSOFT_FORM_HOSTS, import_microsoft_form, submit_microsoft_form_by_entries
 
 
 GOOGLE_FORM_HOSTS = {"docs.google.com"}
@@ -25,11 +25,9 @@ def import_external_form(url: str):
     return import_microsoft_form(url)
 
 
-def submit_external_form(url: str, answers: dict[str, list[str]]):
+def submit_external_form(url: str, submit_url: str, answers: dict[str, list[str]]):
     provider = detect_form_provider(url)
     if provider == "google":
-        form = import_google_form(url)
-        return submit_google_form(form, answers)
+        return submit_google_form_by_entries(submit_url, answers)
 
-    form = import_microsoft_form(url)
-    return submit_microsoft_form(form, answers)
+    return submit_microsoft_form_by_entries(submit_url, answers)

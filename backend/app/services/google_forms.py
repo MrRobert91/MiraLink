@@ -226,5 +226,36 @@ def submit_google_form(
             http_client.close()
 
 
+def submit_google_form_by_entries(
+    submit_url: str,
+    answers: dict[str, list[str]],
+    client: httpx.Client | None = None,
+) -> GoogleFormSubmitResult:
+    payload: list[tuple[str, str]] = []
+    for entry_id, values in answers.items():
+        for value in values:
+            payload.append((entry_id, value))
+
+    if not payload:
+        raise GoogleFormError("No hay respuestas seleccionadas para enviar.")
+
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
+    try:
+        response = http_client.post(
+            submit_url,
+            content=urlencode(payload),
+            headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0"},
+        )
+        return GoogleFormSubmitResult(
+            submitted=response.status_code in {200, 302},
+            status_code=response.status_code,
+            message="Formulario enviado." if response.status_code in {200, 302} else "Google Forms rechazo el envio.",
+        )
+    finally:
+        if owns_client:
+            http_client.close()
+
+
 def answers_from_query_string(raw: str) -> dict[str, list[str]]:
     return {key: values for key, values in parse_qs(raw, keep_blank_values=True).items() if re.match(r"^[\w-]+$", key)}

@@ -298,7 +298,7 @@ export default function App() {
     setStatusMessage("Enviando respuestas al formulario...");
 
     try {
-      const response = await submitGoogleForm(activeFormUrl, formFlow.answers);
+      const response = await submitGoogleForm(activeFormUrl, formFlow.form.submit_url, formFlow.answers);
       setSubmitMessage(response.message);
       if (response.submitted) {
         dispatchFormFlow({ type: "markSubmitted" });

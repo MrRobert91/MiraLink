@@ -149,12 +149,12 @@ def test_generic_forms_import_endpoint_routes_by_url(monkeypatch):
 
 
 def test_generic_forms_submit_endpoint_routes_by_provider(monkeypatch):
-    monkeypatch.setattr("app.main.submit_external_form", lambda url, answers: {"submitted": True, "status_code": 200, "message": "Formulario enviado."})
+    monkeypatch.setattr("app.main.submit_external_form", lambda url, submit_url, answers: {"submitted": True, "status_code": 200, "message": "Formulario enviado."})
     client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
 
     response = client.post(
         "/api/forms/submit",
-        json={"url": "https://forms.office.com/r/abc123", "answers": {"q1": ["No"]}},
+        json={"url": "https://forms.office.com/r/abc123", "submit_url": "https://forms.office.com/api/submit", "answers": {"q1": ["No"]}},
     )
 
     assert response.status_code == 200

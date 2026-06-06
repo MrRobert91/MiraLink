@@ -52,7 +52,7 @@ describe("form flow", () => {
     state = formFlowReducer(state, { type: "answerNo" });
 
     expect(state.currentStepIndex).toBe(2);
-    expect(state.answers.q1).toEqual(["Tengo sed"]);
+    expect(state.answers["entry.111"]).toEqual(["Tengo sed"]);
   });
 
   it("keeps only the selected radio answer and advances to review after the last step", () => {
@@ -63,7 +63,7 @@ describe("form flow", () => {
     state = formFlowReducer(state, { type: "answerYes" });
 
     expect(state.status).toBe("review");
-    expect(state.answers.q2).toEqual(["Si"]);
+    expect(state.answers["entry.222"]).toEqual(["Si"]);
   });
 
   it("skips the remaining radio options after the first yes", () => {
@@ -75,6 +75,6 @@ describe("form flow", () => {
 
     expect(state.currentStepIndex).toBe(4);
     expect(state.status).toBe("review");
-    expect(state.answers.q2).toEqual(["Si"]);
+    expect(state.answers["entry.222"]).toEqual(["Si"]);
   });
 });

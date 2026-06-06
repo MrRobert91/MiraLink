@@ -35,6 +35,7 @@ class GoogleFormImportRequest(BaseModel):
 
 class GoogleFormSubmitRequest(BaseModel):
     url: str
+    submit_url: str = ""
     answers: dict[str, list[str]]
 
 
@@ -225,7 +226,7 @@ def create_app(
     @app.post("/api/forms/submit")
     def submit_form_endpoint(payload: GoogleFormSubmitRequest):
         try:
-            return submit_external_form(payload.url, payload.answers)
+            return submit_external_form(payload.url, payload.submit_url, payload.answers)
         except GoogleFormError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

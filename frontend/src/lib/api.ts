@@ -46,11 +46,11 @@ export async function importGoogleForm(url: string): Promise<ImportedForm> {
   return parseJson<ImportedForm>(response);
 }
 
-export async function submitGoogleForm(url: string, answers: Record<string, string[]>): Promise<GoogleFormSubmitResponse> {
+export async function submitGoogleForm(url: string, submitUrl: string, answers: Record<string, string[]>): Promise<GoogleFormSubmitResponse> {
   const response = await fetch(buildApiUrl(apiBaseUrl, "/api/forms/submit"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, answers }),
+    body: JSON.stringify({ url, submit_url: submitUrl, answers }),
   });
   return parseJson<GoogleFormSubmitResponse>(response);
 }
