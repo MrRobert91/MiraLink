@@ -254,5 +254,4 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
 export type MiraLinkProfile = {
   user_id: string;
   preferences: MiraLinkPreferences;
-  quick_phrases: string[];
 };

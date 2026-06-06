@@ -27,7 +27,6 @@ describe("api url builder", () => {
         JSON.stringify({
           user_id: "miralink-default",
           preferences: defaultMiraLinkPreferences,
-          quick_phrases: [],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -52,7 +51,6 @@ describe("api url builder", () => {
         JSON.stringify({
           user_id: "miralink-default",
           preferences,
-          quick_phrases: [],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),

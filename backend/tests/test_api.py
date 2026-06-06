@@ -2,51 +2,14 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.services.form_responses import SqliteFormResponseStore
-from app.services.gemma import BaseGemmaReranker, NoopGemmaReranker, RerankRequest
 from app.services.google_forms import (
     GoogleFormError,
     ImportedGoogleForm,
 )
 
 
-class FixedReranker(BaseGemmaReranker):
-    provider_name = "fixed"
-    model_name = "fixed-model"
-
-    def rerank(self, request: RerankRequest) -> list[str]:
-        return list(reversed(request.candidates))
-
-
-def test_predict_endpoint_returns_ranked_suggestions():
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
-
-    response = client.post(
-        "/api/predict",
-        json={"user_id": "demo", "text": "quiero a", "language": "es"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert "suggestions" in payload
-    assert payload["suggestions"][0]["text"] == "agua"
-
-
-def test_tts_endpoint_returns_mock_audio():
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
-
-    response = client.post(
-        "/api/tts",
-        json={"text": "Hola", "language": "es-ES", "voice": "default"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["mime_type"] == "audio/wav"
-    assert payload["audio_base64"]
-
-
 def test_profile_endpoint_persists_preferences():
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
+    client = TestClient(create_app())
     user_id = "demo-profile-test"
 
     update_response = client.put(
@@ -62,26 +25,6 @@ def test_profile_endpoint_persists_preferences():
     assert payload["preferences"]["high_contrast"] is True
 
 
-def test_gemma_rerank_endpoint_returns_proxy_response():
-    client = TestClient(create_app(gemma_reranker=FixedReranker()))
-
-    response = client.post(
-        "/api/gemma/rerank",
-        json={
-            "user_id": "demo",
-            "language": "es",
-            "context": "quiero a",
-            "candidates": ["agua", "ahora", "ayuda"],
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["provider"] == "fixed"
-    assert payload["model"] == "fixed-model"
-    assert payload["ordered_candidates"] == ["ayuda", "ahora", "agua"]
-
-
 def test_generic_forms_import_endpoint_routes_by_url(monkeypatch):
     form = ImportedGoogleForm(
         form_id="abc123",
@@ -90,7 +33,7 @@ def test_generic_forms_import_endpoint_routes_by_url(monkeypatch):
         questions=[],
     )
     monkeypatch.setattr("app.main.import_external_form", lambda url: form)
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker()))
+    client = TestClient(create_app())
 
     response = client.post("/api/forms/import", json={"url": "https://forms.office.com/r/abc123"})
 
@@ -101,7 +44,7 @@ def test_generic_forms_import_endpoint_routes_by_url(monkeypatch):
 def test_generic_forms_submit_endpoint_saves_and_marks_success(monkeypatch, tmp_path):
     monkeypatch.setattr("app.main.submit_external_form", lambda url, submit_url, answers: {"submitted": True, "status_code": 200, "message": "Formulario enviado."})
     store = SqliteFormResponseStore(tmp_path / "responses.db")
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker(), response_store=store))
+    client = TestClient(create_app(response_store=store))
 
     response = client.post(
         "/api/forms/submit",
@@ -133,7 +76,7 @@ def test_generic_forms_submit_endpoint_saves_provider_rejection(monkeypatch, tmp
         },
     )
     store = SqliteFormResponseStore(tmp_path / "responses.db")
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker(), response_store=store))
+    client = TestClient(create_app(response_store=store))
 
     response = client.post(
         "/api/forms/submit",
@@ -157,7 +100,7 @@ def test_generic_forms_submit_endpoint_saves_transport_failure(monkeypatch, tmp_
 
     monkeypatch.setattr("app.main.submit_external_form", fail)
     store = SqliteFormResponseStore(tmp_path / "responses.db")
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker(), response_store=store))
+    client = TestClient(create_app(response_store=store))
 
     response = client.post(
         "/api/forms/submit",
@@ -185,7 +128,7 @@ def test_generic_forms_submit_retry_updates_same_submission(monkeypatch, tmp_pat
     )
     monkeypatch.setattr("app.main.submit_external_form", lambda *args: next(results))
     store = SqliteFormResponseStore(tmp_path / "responses.db")
-    client = TestClient(create_app(gemma_reranker=NoopGemmaReranker(), response_store=store))
+    client = TestClient(create_app(response_store=store))
     request = {
         "url": "https://docs.google.com/forms/d/e/abc123/viewform",
         "submit_url": "https://docs.google.com/forms/d/e/abc123/formResponse",
