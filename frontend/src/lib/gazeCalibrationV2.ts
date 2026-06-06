@@ -46,6 +46,12 @@ export type CalibrationModelV2 = {
 
 const ridgeLambda = 0.01;
 const calibrationEdgeExpansionFactor = 0.125;
+// Peso de la regresión 2-D en la mezcla con el mapeo por anclas. La regresión
+// capta el acoplamiento entre ejes (la señal horizontal varía con la altura de
+// la mirada y viceversa), que el mapeo 1-D por anclas ignora; las anclas, a su
+// vez, garantizan cobertura de borde a borde. Mezclamos ambos para combinar sus
+// fortalezas.
+const regressionBlendWeight = 0.6;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -82,6 +88,19 @@ export function featureVectorToArray(features: GazeFeatureVector) {
     features.pitch,
     features.roll,
   ];
+}
+
+/**
+ * Conjunto compacto de features para la regresión por eje. Usa las señales de
+ * mirada por eje más su término cruzado para modelar el acoplamiento X↔Y. Es
+ * deliberadamente pequeño: con ~11 muestras de calibración, usar las 15 features
+ * crudas daría un sistema infradeterminado (más parámetros que muestras) que
+ * sobreajusta y generaliza mal.
+ */
+function regressionFeatureArray(features: GazeFeatureVector) {
+  const signalX = getAxisSignal(features, "x");
+  const signalY = getAxisSignal(features, "y");
+  return [1, signalX, signalY, signalX * signalY];
 }
 
 function solveLinearSystem(matrix: number[][], vector: number[]) {
@@ -126,13 +145,36 @@ function fitAxis(samples: CalibrationSampleV2[], targetKey: "x" | "y") {
     return [];
   }
 
-  const rows = samples.map((sample) => featureVectorToArray(sample.features));
+  const rows = samples.map((sample) => regressionFeatureArray(sample.features));
   const cols = rows[0]?.length ?? 0;
+  if (cols === 0) {
+    return [];
+  }
+
+  // Estandarizamos cada columna (salvo el sesgo, col 0) a media 0 y desviación 1
+  // antes del ridge. Sin esto, las señales de mirada (~0.05) son tan pequeñas
+  // que ridgeLambda aplastaría sus pesos y la regresión infraajustaría la
+  // pendiente. Tras resolver, reconvertimos los pesos a la escala cruda para que
+  // predictWithWeights pueda seguir usando regressionFeatureArray sin cambios.
+  const means = new Array<number>(cols).fill(0);
+  const stds = new Array<number>(cols).fill(1);
+  for (let column = 1; column < cols; column += 1) {
+    const values = rows.map((row) => row[column]);
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+    means[column] = mean;
+    stds[column] = Math.sqrt(variance) || 1;
+  }
+
+  const standardizedRows = rows.map((row) =>
+    row.map((value, column) => (column === 0 ? 1 : (value - means[column]) / stds[column])),
+  );
+
   const xtx = Array.from({ length: cols }, () => Array.from({ length: cols }, () => 0));
   const xty = Array.from({ length: cols }, () => 0);
 
-  for (let sampleIndex = 0; sampleIndex < rows.length; sampleIndex += 1) {
-    const row = rows[sampleIndex];
+  for (let sampleIndex = 0; sampleIndex < standardizedRows.length; sampleIndex += 1) {
+    const row = standardizedRows[sampleIndex];
     const weight = clamp(samples[sampleIndex].quality, 0.01, 1);
     for (let i = 0; i < cols; i += 1) {
       xty[i] += row[i] * samples[sampleIndex].target[targetKey] * weight;
@@ -142,11 +184,23 @@ function fitAxis(samples: CalibrationSampleV2[], targetKey: "x" | "y") {
     }
   }
 
-  for (let diagonal = 0; diagonal < cols; diagonal += 1) {
+  // No penalizamos el sesgo (col 0).
+  for (let diagonal = 1; diagonal < cols; diagonal += 1) {
     xtx[diagonal][diagonal] += ridgeLambda;
   }
 
-  return solveLinearSystem(xtx, xty);
+  const standardizedWeights = solveLinearSystem(xtx, xty);
+
+  const rawWeights = new Array<number>(cols).fill(0);
+  let bias = standardizedWeights[0] ?? 0;
+  for (let column = 1; column < cols; column += 1) {
+    const weight = standardizedWeights[column] ?? 0;
+    rawWeights[column] = weight / stds[column];
+    bias -= (weight * means[column]) / stds[column];
+  }
+  rawWeights[0] = bias;
+
+  return rawWeights;
 }
 
 function predictWithWeights(weights: number[], features: GazeFeatureVector) {
@@ -154,7 +208,7 @@ function predictWithWeights(weights: number[], features: GazeFeatureVector) {
     return 0;
   }
 
-  const featureArray = featureVectorToArray(features);
+  const featureArray = regressionFeatureArray(features);
   return featureArray.reduce((sum, value, index) => sum + value * (weights[index] ?? 0), 0);
 }
 
@@ -352,15 +406,56 @@ export function applyCalibrationToFrame(
     x: getAxisSignal(features, "x"),
     y: getAxisSignal(features, "y"),
   };
+  // El boost de sensibilidad se aplica una vez sobre la mezcla final (abajo),
+  // así que aquí calibramos sin él (sensibilidad = 1).
   const calibratedPoint = {
-    x: applyAxisCalibration(signalPoint.x, model.axisRangeX, model.axisAnchorsX, options?.horizontalSensitivity ?? 1),
-    y: applyAxisCalibration(signalPoint.y, model.axisRangeY, model.axisAnchorsY, options?.verticalSensitivity ?? 1),
+    x: applyAxisCalibration(signalPoint.x, model.axisRangeX, model.axisAnchorsX, 1),
+    y: applyAxisCalibration(signalPoint.y, model.axisRangeY, model.axisAnchorsY, 1),
   };
 
   return {
-    x: model.axisRangeX || model.axisAnchorsX ? calibratedPoint.x : regressionPoint.x,
-    y: model.axisRangeY || model.axisAnchorsY ? calibratedPoint.y : regressionPoint.y,
+    x: blendAxisPrediction(
+      regressionPoint.x,
+      calibratedPoint.x,
+      model.axisRangeX,
+      model.axisAnchorsX,
+      options?.horizontalSensitivity ?? 1,
+    ),
+    y: blendAxisPrediction(
+      regressionPoint.y,
+      calibratedPoint.y,
+      model.axisRangeY,
+      model.axisAnchorsY,
+      options?.verticalSensitivity ?? 1,
+    ),
   };
+}
+
+/**
+ * Mezcla la predicción de la regresión 2-D con la del mapeo por anclas/rango y
+ * aplica el boost de sensibilidad alrededor del centro del rango, recortando al
+ * rango calibrado para no extrapolar fuera de la pantalla. Si no hay rango ni
+ * anclas (modelo vacío), devuelve la regresión tal cual.
+ */
+function blendAxisPrediction(
+  regressionValue: number,
+  calibratedValue: number,
+  axisRange: AxisRangeCalibration | null,
+  axisAnchors: AxisAnchorCalibration | null,
+  sensitivity: number,
+) {
+  if (!axisRange && !axisAnchors) {
+    return regressionValue;
+  }
+
+  const anchorTargets = axisAnchors?.points.map((point) => point.target) ?? [calibratedValue];
+  const rangeMin = axisRange?.targetMin ?? Math.min(...anchorTargets);
+  const rangeMax = axisRange?.targetMax ?? Math.max(...anchorTargets);
+  const blended = regressionBlendWeight * regressionValue + (1 - regressionBlendWeight) * calibratedValue;
+  const center = (rangeMin + rangeMax) / 2;
+  const boosted = center + (blended - center) * sensitivity;
+
+  return clamp(boosted, rangeMin, rangeMax);
 }
 
 export function buildCalibrationTelemetry(
