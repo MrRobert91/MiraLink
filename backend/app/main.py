@@ -250,28 +250,22 @@ def create_app(
 
     @app.post("/api/forms/submit")
     def submit_form_endpoint(payload: GoogleFormSubmitRequest):
-        try:
-            result = submit_external_form(payload.url, payload.submit_url, payload.answers)
-        except GoogleFormError as exc:
-            logger.warning("submit form_error url=%s answers_keys=%s error=%s", payload.url, list(payload.answers.keys()), exc)
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except Exception as exc:
-            logger.exception("submit unexpected_error url=%s", payload.url)
-            raise HTTPException(status_code=502, detail="No se pudo enviar el formulario.") from exc
+        question_map = {q.entry_id: q for q in payload.questions}
+        answer_records = [
+            {
+                "entry_id": entry_id,
+                "question_title": question_map[entry_id].title if entry_id in question_map else entry_id,
+                "question_type": question_map[entry_id].type if entry_id in question_map else "radio",
+                "selected_options": values,
+            }
+            for entry_id, values in payload.answers.items()
+            if values
+        ]
 
-        if getattr(result, "submitted", False):
+        def _persist() -> None:
+            if not answer_records:
+                return
             try:
-                question_map = {q.entry_id: q for q in payload.questions}
-                answer_records = [
-                    {
-                        "entry_id": entry_id,
-                        "question_title": question_map[entry_id].title if entry_id in question_map else entry_id,
-                        "question_type": question_map[entry_id].type if entry_id in question_map else "radio",
-                        "selected_options": values,
-                    }
-                    for entry_id, values in payload.answers.items()
-                    if values
-                ]
                 responses.record_submission(
                     form_id=payload.form_id or payload.url,
                     form_title=payload.form_title or "Sin titulo",
@@ -283,6 +277,18 @@ def create_app(
             except Exception:
                 pass
 
+        try:
+            result = submit_external_form(payload.url, payload.submit_url, payload.answers)
+        except GoogleFormError as exc:
+            logger.warning("submit form_error url=%s answers_keys=%s error=%s", payload.url, list(payload.answers.keys()), exc)
+            _persist()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("submit unexpected_error url=%s", payload.url)
+            _persist()
+            raise HTTPException(status_code=502, detail="No se pudo enviar el formulario.") from exc
+
+        _persist()
         return result
 
     @app.get("/api/admin/submissions")

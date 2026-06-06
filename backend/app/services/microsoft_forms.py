@@ -94,6 +94,31 @@ def _first_string(node: dict[str, Any], keys: tuple[str, ...]) -> str | None:
     return None
 
 
+_RESPONSE_URL_RE = re.compile(
+    r'https://forms\.(?:office\.com|cloud\.microsoft)/formapi/api/[^"\'<>\s\\]+/responses',
+    re.IGNORECASE,
+)
+
+
+def _find_submit_url_in_html(html: str) -> str:
+    """Search raw HTML/JS for a formapi responses URL."""
+    match = _RESPONSE_URL_RE.search(html)
+    return match.group(0) if match else ""
+
+
+def _construct_submit_url_from_data(data: dict[str, Any]) -> str:
+    """Build the MS Forms submit URL from tenant/user/form IDs in *data*."""
+    tenant_id = _first_string(data, ("tenantId", "tid", "TenantId"))
+    user_id = _first_string(data, ("userId", "ownerId", "creatorId", "UserId", "authorId"))
+    encrypted_id = _first_string(data, ("id",))
+    if tenant_id and user_id and encrypted_id:
+        return (
+            f"https://forms.office.com/formapi/api/{tenant_id}"
+            f"/users/{user_id}/forms('{encrypted_id}')/responses"
+        )
+    return ""
+
+
 def _choice_label(choice: Any) -> str | None:
     if isinstance(choice, str):
         return choice
@@ -158,6 +183,15 @@ def _question_from_dict(node: dict[str, Any]) -> GoogleFormQuestion | None:
 def import_microsoft_form_from_runtime_json(form_id: str, data: dict[str, Any]) -> ImportedGoogleForm:
     title = _first_string(data, ("title", "formTitle", "name")) or "Microsoft Forms"
     submit_url = _first_string(data, ("submitUrl", "responsePostUrl", "postUrl", "submitURL")) or ""
+    if not submit_url:
+        submit_url = _construct_submit_url_from_data(data)
+    if not submit_url:
+        for node in _walk(data):
+            if isinstance(node, dict):
+                candidate = _construct_submit_url_from_data(node)
+                if candidate:
+                    submit_url = candidate
+                    break
     questions: list[GoogleFormQuestion] = []
     seen_questions: set[str] = set()
 
@@ -204,10 +238,18 @@ def import_microsoft_form_from_html(form_id: str, html: str) -> ImportedGoogleFo
             if not submit_url and submit_candidate:
                 submit_url = submit_candidate
 
+            if not submit_url:
+                candidate = _construct_submit_url_from_data(node)
+                if candidate:
+                    submit_url = candidate
+
             question = _question_from_dict(node)
             if question and question.id not in seen_questions:
                 seen_questions.add(question.id)
                 questions.append(question)
+
+    if not submit_url:
+        submit_url = _find_submit_url_in_html(html)
 
     if not questions:
         raise GoogleFormError("El formulario de Microsoft no contiene preguntas de opcion compatibles.")
