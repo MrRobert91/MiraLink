@@ -150,3 +150,35 @@ export type SavedForm = {
   saved_at: string;
   last_used_at: string;
 };
+
+export type MiraLinkPreferences = {
+  language: "es";
+  provider_mode: "mediapipe" | "pointer";
+  dwell_ms: number;
+  neutral_zone_percent: number;
+  stabilization: number;
+  horizontal_sensitivity: number;
+  vertical_sensitivity: number;
+  high_contrast: boolean;
+  use_pitch_assist: boolean;
+  invert_vertical_axis: boolean;
+};
+
+export const defaultMiraLinkPreferences: MiraLinkPreferences = {
+  language: "es",
+  provider_mode: "mediapipe",
+  dwell_ms: 3000,
+  neutral_zone_percent: 24,
+  stabilization: 82,
+  horizontal_sensitivity: 1.2,
+  vertical_sensitivity: 1.2,
+  high_contrast: false,
+  use_pitch_assist: true,
+  invert_vertical_axis: false,
+};
+
+export type MiraLinkProfile = {
+  user_id: string;
+  preferences: MiraLinkPreferences;
+  quick_phrases: string[];
+};

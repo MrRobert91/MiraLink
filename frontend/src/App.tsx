@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Route, Routes, useNavigate } from "react-router-dom";
 
+import { AppNavigation } from "./components/AppNavigation";
 import { BinaryFormPanel } from "./components/BinaryFormPanel";
+import { CameraPreview } from "./components/CameraPreview";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
-import { CalibrationPanel } from "./components/CalibrationPanel";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
-import { GazeDiagnosticsPanel } from "./components/GazeDiagnosticsPanel";
+import { SettingsPage } from "./components/SettingsPage";
 import { useCameraStream } from "./hooks/useCameraStream";
 import { useDwellSelection } from "./hooks/useDwellSelection";
 import { useGazeProvider } from "./hooks/useGazeProvider";
-import { importGoogleForm, submitGoogleForm, getSavedForms, saveForm, deleteSavedForm } from "./lib/api";
+import {
+  deleteSavedForm,
+  getProfile,
+  getSavedForms,
+  importGoogleForm,
+  saveForm,
+  submitGoogleForm,
+  updateProfile,
+} from "./lib/api";
 import type { SubmitFormPayload } from "./lib/api";
 import { resolveBinaryDecisionTarget } from "./lib/decisionZone";
 import { createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
@@ -24,8 +34,15 @@ import {
   type CalibrationModelV2,
 } from "./lib/gazeCalibrationV2";
 import { resolveCalibrationTarget } from "./lib/calibration";
-import type { ProviderMode } from "./lib/gazeProvider";
-import type { CalibrationSampleV2, GazeFeatureVector, GazeFrame, GazePoint, SavedForm } from "./types";
+import {
+  defaultMiraLinkPreferences,
+  type CalibrationSampleV2,
+  type GazeFeatureVector,
+  type GazeFrame,
+  type GazePoint,
+  type MiraLinkPreferences,
+  type SavedForm,
+} from "./types";
 
 const calibrationHoldMs = 2200;
 const calibrationMinPointMs = 1400;
@@ -60,10 +77,12 @@ function clampPointToViewport(point: GazePoint | null) {
 }
 
 export default function App() {
+  const navigate = useNavigate();
   const [formUrl, setFormUrl] = useState("");
   const [activeFormUrl, setActiveFormUrl] = useState("");
   const [formFlow, dispatchFormFlow] = useReducer(formFlowReducer, undefined, createInitialFormFlowState);
-  const [providerMode, setProviderMode] = useState<ProviderMode>("mediapipe");
+  const [providerMode, setProviderMode] =
+    useState<MiraLinkPreferences["provider_mode"]>("mediapipe");
   const [dwellMs, setDwellMs] = useState(3000);
   const [neutralZonePercent, setNeutralZonePercent] = useState(24);
   const [highContrast, setHighContrast] = useState(false);
@@ -78,8 +97,11 @@ export default function App() {
   const [submittingForm, setSubmittingForm] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [formStartedAt, setFormStartedAt] = useState<number | null>(null);
-  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [savedForms, setSavedForms] = useState<SavedForm[]>([]);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [preferencesSaved, setPreferencesSaved] = useState(false);
   const [calibrationActive, setCalibrationActive] = useState(false);
   const [calibrationIndex, setCalibrationIndex] = useState(0);
   const [calibrationSamples, setCalibrationSamples] = useState<CalibrationSampleV2[]>([]);
@@ -198,13 +220,18 @@ export default function App() {
     },
     [handleAnswerNo, handleAnswerYes],
   );
+  const resolveDecisionTargetId = useCallback(
+    (gazePoint: GazePoint | null, targets: Parameters<typeof resolveBinaryDecisionTarget>[1]) =>
+      resolveBinaryDecisionTarget(gazePoint, targets),
+    [],
+  );
 
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
     gazePoint: actionablePoint,
     dwellMs,
     snapRadius: calibrationModel.sampleCount >= 4 ? 180 : 240,
     onActivate: handleActivateTarget,
-    resolveTargetId: (gazePoint, targets) => resolveBinaryDecisionTarget(gazePoint, targets),
+    resolveTargetId: resolveDecisionTargetId,
   });
 
   useEffect(() => {
@@ -250,24 +277,6 @@ export default function App() {
     }
   }, [camera.error]);
 
-  useEffect(() => {
-    if (!formFlow.form) {
-      window.localStorage.removeItem("eyespeak-form-progress");
-      return;
-    }
-
-    window.localStorage.setItem(
-      "eyespeak-form-progress",
-      JSON.stringify({
-        form_id: formFlow.form.form_id,
-        title: formFlow.form.title,
-        answers: formFlow.answers,
-        currentStepIndex: formFlow.currentStepIndex,
-        status: formFlow.status,
-      }),
-    );
-  }, [formFlow.answers, formFlow.currentStepIndex, formFlow.form, formFlow.status]);
-
   const handleImportForm = useCallback(async () => {
     const trimmedUrl = formUrl.trim();
     if (!trimmedUrl) {
@@ -284,6 +293,7 @@ export default function App() {
       setActiveFormUrl(trimmedUrl);
       setFormStartedAt(Date.now());
       dispatchFormFlow({ type: "loadForm", form: importedForm });
+      dispatchFormFlow({ type: "openCalibrationChoice" });
       resetDwell();
       setStatusMessage(`Formulario importado: ${importedForm.title}.`);
       try {
@@ -307,23 +317,6 @@ export default function App() {
         const forms = await getSavedForms();
         if (cancelled) return;
         setSavedForms(forms);
-        if (forms.length > 0) {
-          const last = forms[0];
-          setFormUrl(last.form_url);
-          setImportingForm(true);
-          try {
-            const importedForm = await importGoogleForm(last.form_url);
-            if (cancelled) return;
-            setActiveFormUrl(last.form_url);
-            setFormStartedAt(Date.now());
-            dispatchFormFlow({ type: "loadForm", form: importedForm });
-            setStatusMessage(`Formulario cargado automaticamente: ${importedForm.title}.`);
-          } catch {
-            // silently skip auto-import if form is no longer accessible
-          } finally {
-            if (!cancelled) setImportingForm(false);
-          }
-        }
       } catch {
         // backend not available yet — ignore
       }
@@ -343,6 +336,7 @@ export default function App() {
       setActiveFormUrl(url);
       setFormStartedAt(Date.now());
       dispatchFormFlow({ type: "loadForm", form: importedForm });
+      dispatchFormFlow({ type: "openCalibrationChoice" });
       resetDwell();
       setStatusMessage(`Formulario cargado: ${importedForm.title}.`);
       try {
@@ -421,6 +415,7 @@ export default function App() {
   }, [resetDwell]);
 
   const handleStartCalibration = useCallback(() => {
+    dispatchFormFlow({ type: "startCalibration" });
     setCalibrationActive(true);
     setCalibrationIndex(0);
     setCalibrationSamples([]);
@@ -547,12 +542,14 @@ export default function App() {
 
         if (nextSamples.length < 4) {
           appendCalibrationLog("resultado insuficiente | menos de 4 muestras capturadas");
+          dispatchFormFlow({ type: "completeCalibration" });
           setStatusMessage(
             "Calibracion completada con datos insuficientes. Repite el proceso con mejor iluminacion y manteniendo la cabeza estable.",
           );
           return;
         }
 
+        dispatchFormFlow({ type: "completeCalibration" });
         setStatusMessage(`Calibracion completada. Precision estimada: ${Math.round(nextModel.score * 100)}%.`);
         return;
       }
@@ -577,246 +574,338 @@ export default function App() {
     };
   }, [appendCalibrationLog, calibrationActive, calibrationIndex]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const profile = await getProfile();
+        if (cancelled) return;
+        const preferences = profile.preferences;
+        setProviderMode(preferences.provider_mode);
+        setDwellMs(preferences.dwell_ms);
+        setNeutralZonePercent(preferences.neutral_zone_percent);
+        setStabilization(preferences.stabilization);
+        setHorizontalSensitivity(preferences.horizontal_sensitivity);
+        setVerticalSensitivity(preferences.vertical_sensitivity);
+        setHighContrast(preferences.high_contrast);
+        setUsePitchAssist(preferences.use_pitch_assist);
+        setInvertVerticalAxis(preferences.invert_vertical_axis);
+      } catch {
+        if (!cancelled) {
+          setPreferencesError(
+            "No se pudo cargar la configuración guardada. Se están usando los valores predeterminados.",
+          );
+        }
+      } finally {
+        if (!cancelled) setPreferencesReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const preferences = useMemo<MiraLinkPreferences>(
+    () => ({
+      ...defaultMiraLinkPreferences,
+      provider_mode: providerMode,
+      dwell_ms: dwellMs,
+      neutral_zone_percent: neutralZonePercent,
+      stabilization,
+      horizontal_sensitivity: horizontalSensitivity,
+      vertical_sensitivity: verticalSensitivity,
+      high_contrast: highContrast,
+      use_pitch_assist: usePitchAssist,
+      invert_vertical_axis: invertVerticalAxis,
+    }),
+    [
+      dwellMs,
+      highContrast,
+      horizontalSensitivity,
+      invertVerticalAxis,
+      neutralZonePercent,
+      providerMode,
+      stabilization,
+      usePitchAssist,
+      verticalSensitivity,
+    ],
+  );
+
+  const handleSavePreferences = useCallback(async (next: MiraLinkPreferences) => {
+    setSavingPreferences(true);
+    setPreferencesError(null);
+    setPreferencesSaved(false);
+    try {
+      const profile = await updateProfile(next);
+      const saved = profile.preferences;
+      setProviderMode(saved.provider_mode);
+      setDwellMs(saved.dwell_ms);
+      setNeutralZonePercent(saved.neutral_zone_percent);
+      setStabilization(saved.stabilization);
+      setHorizontalSensitivity(saved.horizontal_sensitivity);
+      setVerticalSensitivity(saved.vertical_sensitivity);
+      setHighContrast(saved.high_contrast);
+      setUsePitchAssist(saved.use_pitch_assist);
+      setInvertVerticalAxis(saved.invert_vertical_axis);
+      setPreferencesSaved(true);
+    } catch {
+      setPreferencesError("No se pudo guardar la configuración.");
+    } finally {
+      setSavingPreferences(false);
+    }
+  }, []);
+
   const answeredCount = Object.values(formFlow.answers).reduce((total, values) => total + values.length, 0);
   const compatibleQuestionCount = formFlow.form?.questions.length ?? 0;
   const binaryStepCount = formFlow.steps.length;
+  const immersive = calibrationActive || formFlow.status === "answering";
+
+  const handleCancelCalibration = () => {
+    setCalibrationActive(false);
+    setCalibrationProgress(0);
+    dispatchFormFlow({ type: "skipCalibration" });
+    setStatusMessage("Calibración cancelada. Puedes continuar sin calibrar o volver a intentarlo.");
+  };
+
+  const diagnostics = (
+    <div className="diagnostics-grid">
+      <section className="status-card gaze-preview-card">
+        <h3>Previsualización de cámara</h3>
+        <CameraPreview stream={camera.stream} className="camera-preview camera-preview--simple" />
+        <p>
+          {frame?.irisDetected
+            ? `Iris detectados · confianza ${Math.round(frame.confidence * 100)}%`
+            : "Esperando detección de iris"}
+        </p>
+      </section>
+      <section className="status-card">
+        <h3>Estado del seguimiento</h3>
+        <ul>
+          <li>{ready ? "Seguimiento listo" : "Inicializando proveedor"}</li>
+          <li>Etapa: {stage}</li>
+          <li>{error ?? camera.error ?? "Sin errores detectados"}</li>
+          <li>{statusMessage}</li>
+          <li>Preguntas compatibles: {compatibleQuestionCount}</li>
+          <li>Pasos binarios: {binaryStepCount}</li>
+          <li>Respuestas seleccionadas: {answeredCount}</li>
+          <li>Score de calibración: {Math.round(calibrationScore * 100)}%</li>
+          <li>Muestras de calibración: {calibrationModel.sampleCount}</li>
+        </ul>
+      </section>
+      <section className="status-card status-card--debug">
+        <h3>Logs del seguimiento ocular</h3>
+        {combinedDebugLogs.length > 0 ? (
+          <div className="debug-log-list">
+            {combinedDebugLogs.map((entry) => (
+              <code key={entry} className="debug-log-entry">
+                {entry}
+              </code>
+            ))}
+          </div>
+        ) : (
+          <p className="debug-log-empty">Aún no hay logs disponibles.</p>
+        )}
+      </section>
+    </div>
+  );
 
   return (
-    <div className={`app-shell${highContrast ? " app-shell--contrast" : ""}`}>
+    <div
+      className={`app-shell${highContrast ? " app-shell--contrast" : ""}${
+        immersive ? " app-shell--immersive" : ""
+      }`}
+    >
       {calibrationActive ? (
         <CalibrationOverlay
           activeIndex={calibrationIndex}
           activePointIndex={calibrationSequence[calibrationIndex]}
           total={calibrationSequence.length}
           progress={calibrationProgress}
+          cameraPreview={
+            <CameraPreview stream={camera.stream} className="calibration-camera" />
+          }
+          onCancel={handleCancelCalibration}
         />
       ) : null}
 
-      <header className="hero">
-        <div className="hero__copy">
-          <p className="eyebrow">EyeSpeak Forms</p>
-          <h1>Responde formularios con la mirada.</h1>
-          <p className="hero__lead">
-            Importa un Google Forms o Microsoft Forms publico y responde cada opcion con una decision binaria: izquierda para No,
-            derecha para Si, centro para descansar.
-          </p>
-        </div>
-
-        <div className="hero__controls">
-          <label className="control-group">
-            <span>Modo de entrada</span>
-            <select value={providerMode} onChange={(event) => setProviderMode(event.target.value as ProviderMode)}>
-              <option value="mediapipe">Webcam + MediaPipe</option>
-              <option value="pointer">Simulacion con puntero</option>
-            </select>
-          </label>
-          <label className="control-group">
-            <span>Dwell</span>
-            <input type="range" min="1000" max="5000" step="100" value={dwellMs} onChange={(event) => setDwellMs(Number(event.target.value))} />
-            <strong>{dwellMs} ms</strong>
-          </label>
-          <label className="control-group">
-            <span>Zona neutra</span>
-            <input
-              type="range"
-              min="10"
-              max="40"
-              step="1"
-              value={neutralZonePercent}
-              onChange={(event) => setNeutralZonePercent(Number(event.target.value))}
-            />
-            <strong>{neutralZonePercent}%</strong>
-          </label>
-          <label className="control-group">
-            <span>Estabilizacion</span>
-            <input
-              type="range"
-              min="55"
-              max="92"
-              step="1"
-              value={stabilization}
-              onChange={(event) => setStabilization(Number(event.target.value))}
-            />
-            <strong>{stabilization}%</strong>
-          </label>
-          <label className="control-group">
-            <span>Sensibilidad X</span>
-            <input
-              type="range"
-              min="0.8"
-              max="4"
-              step="0.05"
-              value={horizontalSensitivity}
-              onChange={(event) => setHorizontalSensitivity(Number(event.target.value))}
-            />
-            <strong>{horizontalSensitivity.toFixed(2)}x</strong>
-          </label>
-          <label className="control-group">
-            <span>Sensibilidad Y</span>
-            <input
-              type="range"
-              min="0.8"
-              max="4"
-              step="0.05"
-              value={verticalSensitivity}
-              onChange={(event) => setVerticalSensitivity(Number(event.target.value))}
-            />
-            <strong>{verticalSensitivity.toFixed(2)}x</strong>
-          </label>
-          <label className="control-group control-group--toggle">
-            <span>Contraste alto</span>
-            <input type="checkbox" checked={highContrast} onChange={(event) => setHighContrast(event.target.checked)} />
-          </label>
-          <label className="control-group control-group--toggle">
-            <span>Usar pitch</span>
-            <input type="checkbox" checked={usePitchAssist} onChange={(event) => setUsePitchAssist(event.target.checked)} />
-          </label>
-          <label className="control-group control-group--toggle">
-            <span>Invertir eje vertical</span>
-            <input
-              type="checkbox"
-              checked={invertVerticalAxis}
-              onChange={(event) => setInvertVerticalAxis(event.target.checked)}
-            />
-          </label>
-          <button
-            type="button"
-            className="admin-toggle-button"
-            onClick={() => setAdminPanelOpen((prev) => !prev)}
-          >
-            {adminPanelOpen ? "Cerrar panel admin" : "Panel de administracion"}
-          </button>
-        </div>
-      </header>
-
-      <main className="workspace">
-        {adminPanelOpen ? (
-          <AdminPanel onClose={() => setAdminPanelOpen(false)} />
-        ) : (
-          <section className="workspace-main">
-          <CalibrationPanel calibrated={!calibrationActive && calibrationModel.sampleCount >= 4} onCalibrate={handleStartCalibration} />
-          <FormImportPanel
-            formUrl={formUrl}
-            importing={importingForm}
-            error={importError}
-            savedForms={savedForms}
-            onUrlChange={setFormUrl}
-            onImport={handleImportForm}
-            onLoadSaved={handleLoadSavedForm}
-            onDeleteSaved={handleDeleteSavedForm}
-          />
-          <BinaryFormPanel
-            form={formFlow.form}
-            step={activeStep}
-            answers={formFlow.answers}
-            status={formFlow.status}
-            focusedTargetId={focusedKeyId}
-            dwellProgress={dwellProgress}
-            neutralZonePercent={neutralZonePercent}
-            submitting={submittingForm}
-            submitMessage={submitMessage}
-            registerTarget={registerTarget}
-            onAnswerYes={handleAnswerYes}
-            onAnswerNo={handleAnswerNo}
-            onBack={() => dispatchFormFlow({ type: "goBack" })}
-            onSubmit={handleSubmitForm}
-            onReset={handleResetForm}
-          />
-        </section>
-        )}
-      </main>
-
-      <section className="workspace-side">
-        <GazeDiagnosticsPanel
-          mode={providerMode === "pointer" ? "pointer" : "mediapipe"}
-          frame={frame}
-          videoRef={camera.videoRef}
-          overlayRef={overlayRef}
-          cameraReady={camera.ready}
-          cameraError={camera.error}
-          telemetry={telemetry}
-        />
-
-        <section className="status-card">
-          <p className="eyebrow">Estado</p>
-          <h3>{providerLabel}</h3>
-          <ul>
-            <li>{ready ? "Seguimiento listo" : "Inicializando proveedor"}</li>
-            <li>Etapa: {stage}</li>
-            <li>{error ?? camera.error ?? "Sin errores detectados"}</li>
-            <li>{statusMessage}</li>
-            <li>Formulario: {formFlow.form?.title ?? "sin importar"}</li>
-            <li>Proveedor: {formFlow.form?.provider ?? "--"}</li>
-            <li>Preguntas compatibles: {compatibleQuestionCount}</li>
-            <li>Pasos binarios: {binaryStepCount}</li>
-            <li>Respuestas seleccionadas: {answeredCount}</li>
-            <li>Zona neutra central: {neutralZonePercent}%</li>
-            <li>Score de calibracion: {Math.round(calibrationScore * 100)}%</li>
-            <li>Muestras de calibracion: {calibrationModel.sampleCount}</li>
-            <li>{usePitchAssist ? "Pitch asistido activo" : "Pitch asistido desactivado"}</li>
-            <li>{invertVerticalAxis ? "Eje vertical invertido" : "Eje vertical normal"}</li>
-            <li>Sensibilidad X: {horizontalSensitivity.toFixed(2)}x</li>
-            <li>Sensibilidad Y: {verticalSensitivity.toFixed(2)}x</li>
-            <li>
-              {calibrationModel.axisRangeX
-                ? `Rango X activo: ${Math.round(calibrationModel.axisRangeX.targetMin)}-${Math.round(calibrationModel.axisRangeX.targetMax)}`
-                : "Rango X no calibrado"}
-            </li>
-            <li>
-              {calibrationModel.axisRangeY
-                ? `Rango Y activo: ${Math.round(calibrationModel.axisRangeY.targetMin)}-${Math.round(calibrationModel.axisRangeY.targetMax)}`
-                : "Rango Y no calibrado"}
-            </li>
-            <li>
-              {telemetry?.normalizedX !== null && telemetry?.normalizedX !== undefined
-                ? `Norm X viva: ${telemetry.normalizedX.toFixed(3)}`
-                : "Norm X viva: --"}
-            </li>
-            <li>
-              {telemetry?.normalizedY !== null && telemetry?.normalizedY !== undefined
-                ? `Norm Y viva: ${telemetry.normalizedY.toFixed(3)}`
-                : "Norm Y viva: --"}
-            </li>
-            <li>Estabilizacion: {stabilization}%</li>
-          </ul>
-        </section>
-
-        <section className="status-card status-card--debug">
-          <p className="eyebrow">Logs Eye Tracking</p>
-          <h3>Traza de arranque</h3>
-          {combinedDebugLogs.length > 0 ? (
-            <div className="debug-log-list">
-              {combinedDebugLogs.map((entry) => (
-                <code key={entry} className="debug-log-entry">
-                  {entry}
-                </code>
-              ))}
-            </div>
-          ) : (
-            <p className="debug-log-empty">Aun no hay logs disponibles.</p>
-          )}
-        </section>
-
-        <section className="status-card">
-          <p className="eyebrow">Consejos</p>
-          <ul>
-            <li>Usa una webcam a la altura de los ojos.</li>
-            <li>Manten la cabeza estable durante la calibracion.</li>
-            <li>Comprueba en la tarjeta de camara que aparecen mesh, caja facial e iris.</li>
-            <li>Usa la zona central para descansar la vista sin seleccionar respuestas.</li>
-          </ul>
-        </section>
-      </section>
-
-      <div className="gaze-hud">
-        <strong>Seguimiento visual</strong>
-        <span>{calibrationModel.sampleCount >= 4 ? "calibrada" : calibrationActive ? "sin calibrar" : "sin calibrar"}</span>
-        <span>{ready ? providerLabel : "inicializando proveedor"}</span>
-        <span>{displayPoint ? `X ${Math.round(displayPoint.x)} - Y ${Math.round(displayPoint.y)}` : "Esperando coordenadas de mirada"}</span>
-        <span>{frame?.irisDetected ? `Confianza ${Math.round(frame.confidence * 100)}%` : "Esperando landmarks de iris"}</span>
+      {!immersive ? <AppNavigation /> : null}
+      <div className="runtime-media-source" aria-hidden="true">
+        <video ref={camera.videoRef} autoPlay muted playsInline />
+        <canvas ref={overlayRef} />
       </div>
 
-      {displayPoint ? (
+      <Routes>
+        <Route
+          path="/"
+          element={
+            formFlow.status === "answering" ? (
+              <main className="answering-screen">
+                <header className="answering-toolbar">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => dispatchFormFlow({ type: "pauseAnswering" })}
+                  >
+                    Salir
+                  </button>
+                  <strong>
+                    Paso {Math.min(formFlow.currentStepIndex + 1, binaryStepCount)} de{" "}
+                    {binaryStepCount}
+                  </strong>
+                  <span className={ready ? "tracking-status tracking-status--ready" : "tracking-status"}>
+                    {ready ? "Seguimiento listo" : "Inicializando mirada"}
+                  </span>
+                </header>
+                <BinaryFormPanel
+                  form={formFlow.form}
+                  step={activeStep}
+                  answers={formFlow.answers}
+                  status={formFlow.status}
+                  focusedTargetId={focusedKeyId}
+                  dwellProgress={dwellProgress}
+                  neutralZonePercent={neutralZonePercent}
+                  submitting={submittingForm}
+                  submitMessage={submitMessage}
+                  registerTarget={registerTarget}
+                  onAnswerYes={handleAnswerYes}
+                  onAnswerNo={handleAnswerNo}
+                  onBack={() => dispatchFormFlow({ type: "goBack" })}
+                  onSubmit={handleSubmitForm}
+                  onReset={handleResetForm}
+                />
+              </main>
+            ) : (
+              <main className="home-page page-container">
+                {formFlow.status === "idle" ? (
+                  <>
+                    <section className="home-hero">
+                      <div className="home-hero__copy">
+                        <h1>Tu mirada. Tus respuestas.</h1>
+                        <p>
+                          MiraLink transforma formularios públicos en decisiones
+                          accesibles de Sí o No, una opción cada vez.
+                        </p>
+                      </div>
+                      <div className="eye-visual" aria-hidden="true">
+                        <span className="eye-visual__orbit" />
+                        <span className="eye-visual__iris" />
+                        <span className="eye-visual__beam" />
+                      </div>
+                    </section>
+                    <FormImportPanel
+                      formUrl={formUrl}
+                      importing={importingForm}
+                      error={importError}
+                      savedForms={savedForms}
+                      onUrlChange={setFormUrl}
+                      onImport={handleImportForm}
+                      onLoadSaved={handleLoadSavedForm}
+                      onDeleteSaved={handleDeleteSavedForm}
+                    />
+                  </>
+                ) : null}
+
+                {formFlow.status === "calibrationChoice" ? (
+                  <section className="flow-card">
+                    <p className="flow-step">Formulario cargado</p>
+                    <h1>{formFlow.form?.title}</h1>
+                    <p>
+                      Puedes calibrar la mirada para mejorar la precisión o usar el
+                      mapeo predeterminado.
+                    </p>
+                    <div className="choice-grid">
+                      <button type="button" className="choice-card" onClick={handleStartCalibration}>
+                        <strong>Iniciar calibración</strong>
+                        <span>Nueve puntos para adaptar el seguimiento a tu mirada.</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="choice-card"
+                        onClick={() => dispatchFormFlow({ type: "skipCalibration" })}
+                      >
+                        <strong>Continuar sin calibrar</strong>
+                        <span>Usar la detección ocular predeterminada.</span>
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+
+                {formFlow.status === "ready" ? (
+                  <section className="flow-card flow-card--ready">
+                    <p className="flow-step">Todo preparado</p>
+                    <h1>{formFlow.form?.title}</h1>
+                    <p>
+                      {calibrationModel.sampleCount >= 4
+                        ? `Calibración completada con una precisión estimada del ${Math.round(calibrationScore * 100)}%.`
+                        : "Se utilizará el seguimiento ocular sin calibración personalizada."}
+                    </p>
+                    {calibrationModel.sampleCount < 4 ? (
+                      <button type="button" className="secondary-button" onClick={handleStartCalibration}>
+                        Reintentar calibración
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => dispatchFormFlow({ type: "startAnswering" })}
+                    >
+                      {formFlow.currentStepIndex > 0 ? "Continuar formulario" : "Empezar formulario"}
+                    </button>
+                  </section>
+                ) : null}
+
+                {formFlow.status === "review" || formFlow.status === "submitted" ? (
+                  <BinaryFormPanel
+                    form={formFlow.form}
+                    step={activeStep}
+                    answers={formFlow.answers}
+                    status={formFlow.status}
+                    focusedTargetId={focusedKeyId}
+                    dwellProgress={dwellProgress}
+                    neutralZonePercent={neutralZonePercent}
+                    submitting={submittingForm}
+                    submitMessage={submitMessage}
+                    registerTarget={registerTarget}
+                    onAnswerYes={handleAnswerYes}
+                    onAnswerNo={handleAnswerNo}
+                    onBack={() => dispatchFormFlow({ type: "goBack" })}
+                    onSubmit={handleSubmitForm}
+                    onReset={handleResetForm}
+                  />
+                ) : null}
+              </main>
+            )
+          }
+        />
+        <Route
+          path="/configuracion"
+          element={
+            preferencesReady ? (
+              <SettingsPage
+                preferences={preferences}
+                saving={savingPreferences}
+                error={preferencesError}
+                saved={preferencesSaved}
+                diagnostics={diagnostics}
+                onSave={handleSavePreferences}
+              />
+            ) : (
+              <main className="page-container loading-page">Cargando configuración...</main>
+            )
+          }
+        />
+        <Route
+          path="/administracion"
+          element={
+            <main className="admin-page page-container">
+              <AdminPanel onClose={() => navigate("/")} />
+            </main>
+          }
+        />
+        <Route path="*" element={<main className="page-container">Página no encontrada.</main>} />
+      </Routes>
+
+      {displayPoint && immersive ? (
         <div className="gaze-cursor" style={{ left: `${displayPoint.x}px`, top: `${displayPoint.y}px` }}>
           <span className="gaze-cursor__ring" />
           <span className="gaze-cursor__dot" />

@@ -47,6 +47,9 @@ describe("form flow", () => {
 
   it("records checkbox yes answers and skips no answers", () => {
     let state = formFlowReducer(createInitialFormFlowState(), { type: "loadForm", form: sampleForm });
+    state = formFlowReducer(state, { type: "openCalibrationChoice" });
+    state = formFlowReducer(state, { type: "skipCalibration" });
+    state = formFlowReducer(state, { type: "startAnswering" });
 
     state = formFlowReducer(state, { type: "answerYes" });
     state = formFlowReducer(state, { type: "answerNo" });
@@ -57,6 +60,9 @@ describe("form flow", () => {
 
   it("keeps only the selected radio answer and advances to review after the last step", () => {
     let state = formFlowReducer(createInitialFormFlowState(), { type: "loadForm", form: sampleForm });
+    state = formFlowReducer(state, { type: "openCalibrationChoice" });
+    state = formFlowReducer(state, { type: "skipCalibration" });
+    state = formFlowReducer(state, { type: "startAnswering" });
 
     state = formFlowReducer(state, { type: "answerNo" });
     state = formFlowReducer(state, { type: "answerNo" });
@@ -68,6 +74,9 @@ describe("form flow", () => {
 
   it("skips the remaining radio options after the first yes", () => {
     let state = formFlowReducer(createInitialFormFlowState(), { type: "loadForm", form: sampleForm });
+    state = formFlowReducer(state, { type: "openCalibrationChoice" });
+    state = formFlowReducer(state, { type: "skipCalibration" });
+    state = formFlowReducer(state, { type: "startAnswering" });
 
     state = formFlowReducer(state, { type: "answerNo" });
     state = formFlowReducer(state, { type: "answerNo" });
@@ -76,5 +85,35 @@ describe("form flow", () => {
     expect(state.currentStepIndex).toBe(4);
     expect(state.status).toBe("review");
     expect(state.answers["entry.222"]).toEqual(["Si"]);
+  });
+
+  it("moves through preparation states before answering", () => {
+    let state = formFlowReducer(createInitialFormFlowState(), { type: "loadForm", form: sampleForm });
+    expect(state.status).toBe("formLoaded");
+
+    state = formFlowReducer(state, { type: "openCalibrationChoice" });
+    expect(state.status).toBe("calibrationChoice");
+
+    state = formFlowReducer(state, { type: "startCalibration" });
+    expect(state.status).toBe("calibrating");
+
+    state = formFlowReducer(state, { type: "completeCalibration" });
+    expect(state.status).toBe("ready");
+
+    state = formFlowReducer(state, { type: "startAnswering" });
+    expect(state.status).toBe("answering");
+  });
+
+  it("can prepare without calibration and pause without losing progress", () => {
+    let state = formFlowReducer(createInitialFormFlowState(), { type: "loadForm", form: sampleForm });
+    state = formFlowReducer(state, { type: "openCalibrationChoice" });
+    state = formFlowReducer(state, { type: "skipCalibration" });
+    state = formFlowReducer(state, { type: "startAnswering" });
+    state = formFlowReducer(state, { type: "answerYes" });
+    state = formFlowReducer(state, { type: "pauseAnswering" });
+
+    expect(state.status).toBe("ready");
+    expect(state.currentStepIndex).toBe(1);
+    expect(state.answers["entry.111"]).toEqual(["Tengo sed"]);
   });
 });

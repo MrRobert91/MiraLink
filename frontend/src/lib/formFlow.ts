@@ -1,6 +1,14 @@
 import type { DecisionStep, ImportedForm } from "../types";
 
-export type FormFlowStatus = "idle" | "answering" | "review" | "submitted";
+export type FormFlowStatus =
+  | "idle"
+  | "formLoaded"
+  | "calibrationChoice"
+  | "calibrating"
+  | "ready"
+  | "answering"
+  | "review"
+  | "submitted";
 
 export type FormAnswers = Record<string, string[]>;
 
@@ -14,6 +22,12 @@ export type FormFlowState = {
 
 export type FormFlowAction =
   | { type: "loadForm"; form: ImportedForm }
+  | { type: "openCalibrationChoice" }
+  | { type: "startCalibration" }
+  | { type: "completeCalibration" }
+  | { type: "skipCalibration" }
+  | { type: "startAnswering" }
+  | { type: "pauseAnswering" }
   | { type: "answerYes" }
   | { type: "answerNo" }
   | { type: "goBack" }
@@ -101,9 +115,33 @@ export function formFlowReducer(state: FormFlowState, action: FormFlowAction): F
         steps,
         currentStepIndex: 0,
         answers: {},
-        status: steps.length > 0 ? "answering" : "review",
+        status: steps.length > 0 ? "formLoaded" : "review",
       };
     }
+    case "openCalibrationChoice":
+      return state.status === "formLoaded"
+        ? { ...state, status: "calibrationChoice" }
+        : state;
+    case "startCalibration":
+      return state.status === "calibrationChoice"
+        ? { ...state, status: "calibrating" }
+        : state;
+    case "completeCalibration":
+      return state.status === "calibrating"
+        ? { ...state, status: "ready" }
+        : state;
+    case "skipCalibration":
+      return state.status === "calibrationChoice" || state.status === "calibrating"
+        ? { ...state, status: "ready" }
+        : state;
+    case "startAnswering":
+      return state.status === "ready"
+        ? { ...state, status: "answering" }
+        : state;
+    case "pauseAnswering":
+      return state.status === "answering"
+        ? { ...state, status: "ready" }
+        : state;
     case "answerYes":
       return recordYesAndAdvance(state);
     case "answerNo":
