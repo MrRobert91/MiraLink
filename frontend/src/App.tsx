@@ -4,6 +4,7 @@ import { Route, Routes, useNavigate } from "react-router-dom";
 import { AppNavigation } from "./components/AppNavigation";
 import { BinaryFormPanel } from "./components/BinaryFormPanel";
 import { CameraPreview } from "./components/CameraPreview";
+import { GazeOverlayPreview } from "./components/GazeOverlayPreview";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
@@ -684,7 +685,11 @@ export default function App() {
     <div className="diagnostics-grid">
       <section className="status-card gaze-preview-card">
         <h3>Previsualización de cámara</h3>
-        <CameraPreview stream={camera.stream} className="camera-preview camera-preview--simple" />
+        <GazeOverlayPreview
+          stream={camera.stream}
+          sourceCanvasRef={overlayRef}
+          className="camera-preview camera-preview--simple"
+        />
         <p>
           {frame?.irisDetected
             ? `Iris detectados · confianza ${Math.round(frame.confidence * 100)}%`
