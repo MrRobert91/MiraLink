@@ -702,19 +702,30 @@ a:focus-visible {
 .decision-side-overlay--no {
   left: 0;
   width: var(--rest-left, 0);
-  background: linear-gradient(to right, var(--no-bg), transparent);
-  box-shadow: inset 4px 0 0 var(--no-border);
+  background: linear-gradient(to right, var(--no-border), var(--no-bg) 70%);
+  box-shadow: inset 10px 0 0 var(--no-border);
 }
 
 .decision-side-overlay--yes {
   left: var(--rest-right, 100%);
   right: 0;
-  background: linear-gradient(to left, var(--yes-bg), transparent);
-  box-shadow: inset -4px 0 0 var(--yes-border);
+  background: linear-gradient(to left, var(--yes-border), var(--yes-bg) 70%);
+  box-shadow: inset -10px 0 0 var(--yes-border);
 }
 
 .decision-side-overlay--active {
-  opacity: 0.55;
+  opacity: 0.92;
+  animation: decision-side-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes decision-side-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ── Review ───────────────────────────────────────────────────────────────── */
