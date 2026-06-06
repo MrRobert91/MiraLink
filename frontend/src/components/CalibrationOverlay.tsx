@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { calibrationPointPercentages } from "../lib/calibration";
 
@@ -19,6 +19,19 @@ export function CalibrationOverlay({
   cameraBackdrop,
   onCancel,
 }: CalibrationOverlayProps) {
+  useEffect(() => {
+    if (!onCancel) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
+
   return (
     <div className="calibration-overlay" aria-label="Calibracion">
       {cameraBackdrop}
@@ -45,16 +58,20 @@ export function CalibrationOverlay({
         );
       })}
 
-      <div className="calibration-overlay__footer">
-        <p className="calibration-overlay__counter" aria-live="polite">
-          Punto {activeIndex + 1} de {total} · mira fijo hasta que avance
-        </p>
-        {onCancel ? (
-          <button type="button" className="text-button" onClick={onCancel}>
-            Cancelar
-          </button>
-        ) : null}
-      </div>
+      <p className="sr-only" aria-live="polite">
+        Punto {activeIndex + 1} de {total}. Mira fijo hasta que avance.
+      </p>
+
+      {onCancel ? (
+        <button
+          type="button"
+          className="calibration-overlay__cancel"
+          onClick={onCancel}
+          aria-label="Cancelar calibración (Escape)"
+        >
+          Cancelar
+        </button>
+      ) : null}
     </div>
   );
 }
