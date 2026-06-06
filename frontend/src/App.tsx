@@ -326,8 +326,9 @@ export default function App() {
         dispatchFormFlow({ type: "markSubmitted" });
       }
       setStatusMessage(response.message);
-    } catch {
-      setSubmitMessage("No se pudo enviar. Revisa si el formulario requiere login o usa campos no soportados.");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Error desconocido";
+      setSubmitMessage(`No se pudo enviar: ${detail}`);
       setStatusMessage("Envio fallido.");
     } finally {
       setSubmittingForm(false);

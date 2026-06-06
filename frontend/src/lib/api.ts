@@ -32,7 +32,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    let detail = `Error ${response.status}`;
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // ignore parse error, keep generic message
+    }
+    throw new Error(detail);
   }
   return (await response.json()) as T;
 }

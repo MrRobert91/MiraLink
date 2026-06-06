@@ -57,7 +57,7 @@ export function BinaryFormPanel({
           {form.questions.map((question) => (
             <article key={question.id}>
               <strong>{question.title}</strong>
-              <span>{answers[question.id]?.join(", ") || "Sin respuesta seleccionada"}</span>
+              <span>{answers[question.entry_id]?.join(", ") || "Sin respuesta seleccionada"}</span>
             </article>
           ))}
         </div>

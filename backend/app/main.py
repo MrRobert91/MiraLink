@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from fastapi.responses import Response
+logger = logging.getLogger(__name__)
 
 from app.config import Settings
 from app.services.external_forms import import_external_form, submit_external_form
@@ -244,8 +246,10 @@ def create_app(
         try:
             result = submit_external_form(payload.url, payload.submit_url, payload.answers)
         except GoogleFormError as exc:
+            logger.warning("submit form_error url=%s answers_keys=%s error=%s", payload.url, list(payload.answers.keys()), exc)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
+            logger.exception("submit unexpected_error url=%s", payload.url)
             raise HTTPException(status_code=502, detail="No se pudo enviar el formulario.") from exc
 
         if getattr(result, "submitted", False):
