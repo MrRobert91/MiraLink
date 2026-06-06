@@ -7,8 +7,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fastapi.responses import Response
+
 from app.config import Settings
 from app.services.external_forms import import_external_form, submit_external_form
+from app.services.form_responses import SqliteFormResponseStore
 from app.services.gemma import BaseGemmaReranker, RerankRequest, RerankResponse, build_gemma_reranker
 from app.services.google_forms import GoogleFormError, import_google_form, submit_google_form
 from app.services.predictor import PredictionRequest, PredictionResponse, SuggestionEngine
@@ -33,10 +36,21 @@ class GoogleFormImportRequest(BaseModel):
     url: str
 
 
+class FormQuestionMeta(BaseModel):
+    entry_id: str
+    title: str
+    type: str
+
+
 class GoogleFormSubmitRequest(BaseModel):
     url: str
     submit_url: str = ""
     answers: dict[str, list[str]]
+    form_id: str = ""
+    form_title: str = ""
+    provider: str = ""
+    questions: list[FormQuestionMeta] = []
+    duration_seconds: float | None = None
 
 
 def build_default_engine() -> SuggestionEngine:
@@ -91,6 +105,7 @@ def create_app(
     session_store: InMemorySessionStore | None = None,
     profile_store: SqliteProfileStore | None = None,
     gemma_reranker: BaseGemmaReranker | None = None,
+    response_store: SqliteFormResponseStore | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
@@ -144,6 +159,7 @@ def create_app(
     sessions = session_store or InMemorySessionStore()
     provider = tts_provider or build_tts_provider(app_settings.tts_provider)
     profiles = profile_store or SqliteProfileStore(Path(app_settings.profile_db_path))
+    responses = response_store or SqliteFormResponseStore(Path(app_settings.responses_db_path))
 
     @app.get("/health")
     def healthcheck() -> dict[str, str]:
@@ -226,11 +242,58 @@ def create_app(
     @app.post("/api/forms/submit")
     def submit_form_endpoint(payload: GoogleFormSubmitRequest):
         try:
-            return submit_external_form(payload.url, payload.submit_url, payload.answers)
+            result = submit_external_form(payload.url, payload.submit_url, payload.answers)
         except GoogleFormError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=502, detail="No se pudo enviar el formulario.") from exc
+
+        if getattr(result, "submitted", False):
+            try:
+                question_map = {q.entry_id: q for q in payload.questions}
+                answer_records = [
+                    {
+                        "entry_id": entry_id,
+                        "question_title": question_map[entry_id].title if entry_id in question_map else entry_id,
+                        "question_type": question_map[entry_id].type if entry_id in question_map else "radio",
+                        "selected_options": values,
+                    }
+                    for entry_id, values in payload.answers.items()
+                    if values
+                ]
+                responses.record_submission(
+                    form_id=payload.form_id or payload.url,
+                    form_title=payload.form_title or "Sin titulo",
+                    form_url=payload.url,
+                    provider=payload.provider or "unknown",
+                    duration_seconds=payload.duration_seconds,
+                    answers=answer_records,
+                )
+            except Exception:
+                pass
+
+        return result
+
+    @app.get("/api/admin/submissions")
+    def list_submissions():
+        return responses.list_submissions()
+
+    @app.get("/api/admin/submissions/export/csv")
+    def export_submissions_csv(ids: str = ""):
+        id_list = [i.strip() for i in ids.split(",") if i.strip()] if ids else None
+        csv_content = responses.export_csv(ids=id_list)
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="respuestas.csv"'},
+        )
+
+    @app.get("/api/admin/submissions/{submission_id}")
+    def get_submission(submission_id: str):
+        record = responses.get_submission(submission_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Envio no encontrado.")
+        return record
 
     return app
 

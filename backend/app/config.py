@@ -16,6 +16,8 @@ class Settings:
     tts_provider: str = os.getenv("TTS_PROVIDER", "mock")
     profile_db_path: str = os.getenv("PROFILE_DB_PATH", "data/profiles.db")
 
+    responses_db_path: str = os.getenv("RESPONSES_DB_PATH", "data/form_responses.db")
+
     @classmethod
     def from_env(cls) -> "Settings":
         raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
@@ -24,4 +26,5 @@ class Settings:
             allowed_origins=origins,
             tts_provider=os.getenv("TTS_PROVIDER", "mock"),
             profile_db_path=os.getenv("PROFILE_DB_PATH", "data/profiles.db"),
+            responses_db_path=os.getenv("RESPONSES_DB_PATH", "data/form_responses.db"),
         )

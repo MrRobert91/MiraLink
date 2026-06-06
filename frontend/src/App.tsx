@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { BinaryFormPanel } from "./components/BinaryFormPanel";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { CalibrationPanel } from "./components/CalibrationPanel";
+import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
 import { GazeDiagnosticsPanel } from "./components/GazeDiagnosticsPanel";
 import { useCameraStream } from "./hooks/useCameraStream";
 import { useDwellSelection } from "./hooks/useDwellSelection";
 import { useGazeProvider } from "./hooks/useGazeProvider";
 import { importGoogleForm, submitGoogleForm } from "./lib/api";
+import type { SubmitFormPayload } from "./lib/api";
 import { resolveBinaryDecisionTarget } from "./lib/decisionZone";
 import { createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
 import {
@@ -75,6 +77,8 @@ export default function App() {
   const [importError, setImportError] = useState<string | null>(null);
   const [submittingForm, setSubmittingForm] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [formStartedAt, setFormStartedAt] = useState<number | null>(null);
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [calibrationActive, setCalibrationActive] = useState(false);
   const [calibrationIndex, setCalibrationIndex] = useState(0);
   const [calibrationSamples, setCalibrationSamples] = useState<CalibrationSampleV2[]>([]);
@@ -277,6 +281,7 @@ export default function App() {
     try {
       const importedForm = await importGoogleForm(trimmedUrl);
       setActiveFormUrl(trimmedUrl);
+      setFormStartedAt(Date.now());
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       resetDwell();
       setStatusMessage(`Formulario importado: ${importedForm.title}.`);
@@ -297,8 +302,25 @@ export default function App() {
     setSubmitMessage(null);
     setStatusMessage("Enviando respuestas al formulario...");
 
+    const durationSeconds = formStartedAt != null ? (Date.now() - formStartedAt) / 1000 : null;
+
+    const payload: SubmitFormPayload = {
+      url: activeFormUrl,
+      submit_url: formFlow.form.submit_url,
+      answers: formFlow.answers,
+      form_id: formFlow.form.form_id,
+      form_title: formFlow.form.title,
+      provider: formFlow.form.provider,
+      questions: formFlow.form.questions.map((q) => ({
+        entry_id: q.entry_id,
+        title: q.title,
+        type: q.type,
+      })),
+      duration_seconds: durationSeconds,
+    };
+
     try {
-      const response = await submitGoogleForm(activeFormUrl, formFlow.form.submit_url, formFlow.answers);
+      const response = await submitGoogleForm(payload);
       setSubmitMessage(response.message);
       if (response.submitted) {
         dispatchFormFlow({ type: "markSubmitted" });
@@ -310,7 +332,7 @@ export default function App() {
     } finally {
       setSubmittingForm(false);
     }
-  }, [activeFormUrl, formFlow.answers, formFlow.form]);
+  }, [activeFormUrl, formFlow.answers, formFlow.form, formStartedAt]);
 
   const handleResetForm = useCallback(() => {
     dispatchFormFlow({ type: "reset" });
@@ -581,11 +603,21 @@ export default function App() {
               onChange={(event) => setInvertVerticalAxis(event.target.checked)}
             />
           </label>
+          <button
+            type="button"
+            className="admin-toggle-button"
+            onClick={() => setAdminPanelOpen((prev) => !prev)}
+          >
+            {adminPanelOpen ? "Cerrar panel admin" : "Panel de administracion"}
+          </button>
         </div>
       </header>
 
       <main className="workspace">
-        <section className="workspace-main">
+        {adminPanelOpen ? (
+          <AdminPanel onClose={() => setAdminPanelOpen(false)} />
+        ) : (
+          <section className="workspace-main">
           <CalibrationPanel calibrated={!calibrationActive && calibrationModel.sampleCount >= 4} onCalibrate={handleStartCalibration} />
           <FormImportPanel
             formUrl={formUrl}
@@ -612,6 +644,7 @@ export default function App() {
             onReset={handleResetForm}
           />
         </section>
+        )}
       </main>
 
       <section className="workspace-side">

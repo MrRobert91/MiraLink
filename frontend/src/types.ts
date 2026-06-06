@@ -118,3 +118,25 @@ export type GoogleFormSubmitResponse = {
   status_code: number;
   message: string;
 };
+
+export type FormAnswerRecord = {
+  entry_id: string;
+  question_title: string;
+  question_type: FormQuestionType;
+  selected_options: string[];
+};
+
+export type FormSubmissionSummary = {
+  id: string;
+  form_id: string;
+  form_title: string;
+  form_url: string;
+  provider: string;
+  submitted_at: string;
+  duration_seconds: number | null;
+  answer_count: number;
+};
+
+export type FormSubmissionDetail = FormSubmissionSummary & {
+  answers: FormAnswerRecord[];
+};
