@@ -218,6 +218,8 @@ export type MiraLinkPreferences = {
   high_contrast: boolean;
   use_pitch_assist: boolean;
   invert_vertical_axis: boolean;
+  camera_opacity: number;
+  camera_visible: boolean;
 };
 
 export const defaultMiraLinkPreferences: MiraLinkPreferences = {
@@ -232,6 +234,8 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   high_contrast: false,
   use_pitch_assist: true,
   invert_vertical_axis: false,
+  camera_opacity: 35,
+  camera_visible: true,
 };
 
 export type MiraLinkProfile = {

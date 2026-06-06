@@ -209,12 +209,22 @@ export function SettingsPage({
             suffix="x"
             onChange={(value) => update("vertical_sensitivity", value)}
           />
+          <RangeSetting
+            label="Opacidad de la cámara"
+            value={draft.camera_opacity}
+            min={0}
+            max={100}
+            step={5}
+            suffix="%"
+            onChange={(value) => update("camera_opacity", value)}
+          />
         </div>
 
         <div className="settings-toggles">
           {[
             ["use_pitch_assist", "Usar pitch"],
             ["invert_vertical_axis", "Invertir eje vertical"],
+            ["camera_visible", "Mostrar cámara en calibración"],
           ].map(([key, label]) => (
             <label className="toggle-control" key={key}>
               <span>{label}</span>
@@ -224,7 +234,7 @@ export function SettingsPage({
                 checked={Boolean(draft[key as keyof MiraLinkPreferences])}
                 onChange={(event) =>
                   update(
-                    key as "use_pitch_assist" | "invert_vertical_axis",
+                    key as "use_pitch_assist" | "invert_vertical_axis" | "camera_visible",
                     event.target.checked,
                   )
                 }

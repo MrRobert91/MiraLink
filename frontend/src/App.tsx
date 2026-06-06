@@ -3,8 +3,9 @@ import { Route, Routes, useNavigate } from "react-router-dom";
 
 import { AppNavigation } from "./components/AppNavigation";
 import { BinaryFormPanel } from "./components/BinaryFormPanel";
-import { CameraPreview } from "./components/CameraPreview";
 import { GazeOverlayPreview } from "./components/GazeOverlayPreview";
+import { CalibrationCameraBackdrop } from "./components/CalibrationCameraBackdrop";
+import { CalibrationInstructions } from "./components/CalibrationInstructions";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
@@ -54,7 +55,9 @@ const calibrationSampleIntervalMs = 100;
 const calibrationFeatureStability = 0.14;
 const calibrationMinValidFrames = 12;
 const minimumCalibrationConfidence = 0.45;
-const calibrationSequence = [4, 1, 7, 3, 5, 0, 2, 6, 8] as const;
+// Orden de visita: centro, bordes cardinales, esquinas y, por último, los dos
+// puntos intermedios del eje horizontal medio (índices 4 y 6).
+const calibrationSequence = [5, 1, 9, 3, 7, 0, 2, 8, 10, 4, 6] as const;
 const calibrationFallbackMinFrames = 6;
 const calibrationFallbackQualityMultiplier = 0.8;
 const calibrationSettleMs = 900;
@@ -94,6 +97,8 @@ export default function App() {
   const [horizontalSensitivity, setHorizontalSensitivity] = useState(1.2);
   const [verticalSensitivity, setVerticalSensitivity] = useState(1.2);
   const [stabilization, setStabilization] = useState(82);
+  const [cameraOpacity, setCameraOpacity] = useState(35);
+  const [cameraVisible, setCameraVisible] = useState(true);
   const [statusMessage, setStatusMessage] = useState("Listo para calibrar e importar un formulario.");
   const [importingForm, setImportingForm] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -107,6 +112,7 @@ export default function App() {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
   const [calibrationActive, setCalibrationActive] = useState(false);
+  const [calibrationInstructionsOpen, setCalibrationInstructionsOpen] = useState(false);
   const [calibrationIndex, setCalibrationIndex] = useState(0);
   const [calibrationSamples, setCalibrationSamples] = useState<CalibrationSampleV2[]>([]);
   const [calibrationScore, setCalibrationScore] = useState(0);
@@ -429,6 +435,14 @@ export default function App() {
 
   const handleStartCalibration = useCallback(() => {
     dispatchFormFlow({ type: "startCalibration" });
+    setCalibrationInstructionsOpen(true);
+    setCalibrationActive(false);
+    setStatusMessage("Lee las instrucciones y pulsa Comenzar cuando estés listo.");
+    resetDwell();
+  }, [resetDwell]);
+
+  const handleBeginCalibration = useCallback(() => {
+    setCalibrationInstructionsOpen(false);
     setCalibrationActive(true);
     setCalibrationIndex(0);
     setCalibrationSamples([]);
@@ -603,6 +617,8 @@ export default function App() {
         setTheme(preferences.theme ?? "light");
         setUsePitchAssist(preferences.use_pitch_assist);
         setInvertVerticalAxis(preferences.invert_vertical_axis);
+        setCameraOpacity(preferences.camera_opacity);
+        setCameraVisible(preferences.camera_visible);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -631,6 +647,8 @@ export default function App() {
       high_contrast: themeOptions.find((option) => option.value === theme)?.highContrast ?? false,
       use_pitch_assist: usePitchAssist,
       invert_vertical_axis: invertVerticalAxis,
+      camera_opacity: cameraOpacity,
+      camera_visible: cameraVisible,
     }),
     [
       dwellMs,
@@ -642,6 +660,8 @@ export default function App() {
       stabilization,
       usePitchAssist,
       verticalSensitivity,
+      cameraOpacity,
+      cameraVisible,
     ],
   );
 
@@ -661,6 +681,8 @@ export default function App() {
       setTheme(saved.theme ?? "light");
       setUsePitchAssist(saved.use_pitch_assist);
       setInvertVerticalAxis(saved.invert_vertical_axis);
+      setCameraOpacity(saved.camera_opacity);
+      setCameraVisible(saved.camera_visible);
       setPreferencesSaved(true);
     } catch {
       setPreferencesError("No se pudo guardar la configuración.");
@@ -672,10 +694,11 @@ export default function App() {
   const answeredCount = Object.values(formFlow.answers).reduce((total, values) => total + values.length, 0);
   const compatibleQuestionCount = formFlow.form?.questions.length ?? 0;
   const binaryStepCount = formFlow.steps.length;
-  const immersive = calibrationActive || formFlow.status === "answering";
+  const immersive = calibrationActive || calibrationInstructionsOpen || formFlow.status === "answering";
 
   const handleCancelCalibration = () => {
     setCalibrationActive(false);
+    setCalibrationInstructionsOpen(false);
     setCalibrationProgress(0);
     dispatchFormFlow({ type: "skipCalibration" });
     setStatusMessage("Calibración cancelada. Puedes continuar sin calibrar o volver a intentarlo.");
@@ -731,14 +754,28 @@ export default function App() {
     <div
       className={`app-shell${immersive ? " app-shell--immersive" : ""}`}
     >
+      {calibrationInstructionsOpen ? (
+        <CalibrationInstructions
+          totalPoints={calibrationSequence.length}
+          onBegin={handleBeginCalibration}
+          onCancel={handleCancelCalibration}
+        />
+      ) : null}
+
       {calibrationActive ? (
         <CalibrationOverlay
           activeIndex={calibrationIndex}
           activePointIndex={calibrationSequence[calibrationIndex]}
           total={calibrationSequence.length}
           progress={calibrationProgress}
-          cameraPreview={
-            <CameraPreview stream={camera.stream} className="calibration-camera" />
+          cameraBackdrop={
+            cameraVisible && providerMode === "mediapipe" ? (
+              <CalibrationCameraBackdrop
+                stream={camera.stream}
+                sourceCanvasRef={overlayRef}
+                opacity={cameraOpacity}
+              />
+            ) : null
           }
           onCancel={handleCancelCalibration}
         />
