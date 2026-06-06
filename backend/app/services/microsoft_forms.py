@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 from urllib.parse import urlparse, parse_qs
@@ -14,6 +15,8 @@ from app.services.google_forms import (
     GoogleFormSubmitResult,
     ImportedGoogleForm,
 )
+
+logger = logging.getLogger(__name__)
 
 
 MICROSOFT_FORM_HOSTS = {"forms.office.com", "forms.cloud.microsoft"}
@@ -111,11 +114,17 @@ def _construct_submit_url_from_data(data: dict[str, Any]) -> str:
     tenant_id = _first_string(data, ("tenantId", "tid", "TenantId"))
     user_id = _first_string(data, ("userId", "ownerId", "creatorId", "UserId", "authorId"))
     encrypted_id = _first_string(data, ("id",))
+    logger.debug(
+        "ms_forms id_search tenant=%r user=%r enc_id=%r node_keys=%s",
+        tenant_id, user_id, encrypted_id, list(data.keys())[:12],
+    )
     if tenant_id and user_id and encrypted_id:
-        return (
+        url = (
             f"https://forms.office.com/formapi/api/{tenant_id}"
             f"/users/{user_id}/forms('{encrypted_id}')/responses"
         )
+        logger.info("ms_forms constructed_submit_url=%s", url)
+        return url
     return ""
 
 
@@ -181,17 +190,25 @@ def _question_from_dict(node: dict[str, Any]) -> GoogleFormQuestion | None:
 
 
 def import_microsoft_form_from_runtime_json(form_id: str, data: dict[str, Any]) -> ImportedGoogleForm:
+    logger.info("ms_forms runtime_json top_level_keys=%s", list(data.keys()))
     title = _first_string(data, ("title", "formTitle", "name")) or "Microsoft Forms"
     submit_url = _first_string(data, ("submitUrl", "responsePostUrl", "postUrl", "submitURL")) or ""
+    if submit_url:
+        logger.info("ms_forms submit_url via direct key: %r", submit_url)
     if not submit_url:
         submit_url = _construct_submit_url_from_data(data)
+        if submit_url:
+            logger.info("ms_forms submit_url via top-level ID construction")
     if not submit_url:
         for node in _walk(data):
             if isinstance(node, dict):
                 candidate = _construct_submit_url_from_data(node)
                 if candidate:
                     submit_url = candidate
+                    logger.info("ms_forms submit_url via nested node ID construction")
                     break
+    if not submit_url:
+        logger.warning("ms_forms submit_url NOT FOUND in runtime JSON. Full keys: %s", list(data.keys()))
     questions: list[GoogleFormQuestion] = []
     seen_questions: set[str] = set()
 
@@ -220,6 +237,7 @@ def import_microsoft_form_from_runtime_json(form_id: str, data: dict[str, Any]) 
 
 def import_microsoft_form_from_html(form_id: str, html: str) -> ImportedGoogleForm:
     values = _extract_json_values(html)
+    logger.info("ms_forms html_import html_size=%d json_blobs=%d", len(html), len(values))
     title = "Microsoft Forms"
     submit_url = ""
     questions: list[GoogleFormQuestion] = []
@@ -250,10 +268,19 @@ def import_microsoft_form_from_html(form_id: str, html: str) -> ImportedGoogleFo
 
     if not submit_url:
         submit_url = _find_submit_url_in_html(html)
+        if submit_url:
+            logger.info("ms_forms submit_url via HTML regex: %r", submit_url)
+        else:
+            logger.warning(
+                "ms_forms submit_url NOT FOUND. html_size=%d json_blobs=%d. "
+                "Tried: direct keys, ID construction, regex.",
+                len(html), len(values),
+            )
 
     if not questions:
         raise GoogleFormError("El formulario de Microsoft no contiene preguntas de opcion compatibles.")
 
+    logger.info("ms_forms html_import done title=%r submit_url=%r questions=%d", title, submit_url, len(questions))
     return ImportedGoogleForm(
         form_id=form_id,
         provider="microsoft",
@@ -276,24 +303,44 @@ def _extract_prefetch_form_url(html: str) -> str | None:
 
 def import_microsoft_form(url: str, client: httpx.Client | None = None) -> ImportedGoogleForm:
     form_id = extract_microsoft_form_id(url)
+    logger.info("ms_forms import start url=%s form_id=%r", url, form_id)
     owns_client = client is None
     http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
     try:
         response = http_client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        logger.info(
+            "ms_forms page_fetch status=%d final_url=%s content_length=%d",
+            response.status_code, str(response.url), len(response.text),
+        )
         response.raise_for_status()
         prefetch_url = _extract_prefetch_form_url(response.text)
+        logger.info("ms_forms prefetch_url=%r", prefetch_url)
         if prefetch_url:
             try:
                 runtime_response = http_client.get(
                     prefetch_url,
                     headers={"Accept": "application/json", "User-Agent": "Mozilla/5.0"},
                 )
+                logger.info(
+                    "ms_forms runtime_fetch status=%d content_length=%d",
+                    runtime_response.status_code, len(runtime_response.text),
+                )
                 runtime_response.raise_for_status()
-                return import_microsoft_form_from_runtime_json(form_id, runtime_response.json())
-            except (httpx.HTTPError, ValueError, GoogleFormError):
-                pass
+                result = import_microsoft_form_from_runtime_json(form_id, runtime_response.json())
+                logger.info(
+                    "ms_forms import_done path=runtime_json submit_url=%r questions=%d",
+                    result.submit_url, len(result.questions),
+                )
+                return result
+            except (httpx.HTTPError, ValueError, GoogleFormError) as exc:
+                logger.warning("ms_forms runtime_json_failed error=%s — falling back to HTML", exc)
 
-        return import_microsoft_form_from_html(form_id, response.text)
+        result = import_microsoft_form_from_html(form_id, response.text)
+        logger.info(
+            "ms_forms import_done path=html submit_url=%r questions=%d",
+            result.submit_url, len(result.questions),
+        )
+        return result
     finally:
         if owns_client:
             http_client.close()
@@ -341,7 +388,12 @@ def submit_microsoft_form_by_entries(
     answers: dict[str, list[str]],
     client: httpx.Client | None = None,
 ) -> GoogleFormSubmitResult:
+    logger.info("ms_forms submit start submit_url=%r answer_keys=%s", submit_url, list(answers.keys()))
     if not submit_url:
+        logger.error(
+            "ms_forms submit FAILED: submit_url is empty. "
+            "Form was imported without a discoverable response endpoint."
+        )
         raise GoogleFormError(
             "Microsoft Forms no expuso un endpoint de envio publico en esta URL. "
             "Prueba con un formulario publico 'Anyone can respond'."
@@ -358,11 +410,13 @@ def submit_microsoft_form_by_entries(
     owns_client = client is None
     http_client = client or httpx.Client(timeout=20.0, follow_redirects=True)
     try:
+        logger.info("ms_forms submit POST url=%s payload_questions=%d", submit_url, len(selected_answers))
         response = http_client.post(
             submit_url,
             json={"answers": selected_answers},
             headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
         )
+        logger.info("ms_forms submit response status=%d body_preview=%r", response.status_code, response.text[:300])
         return GoogleFormSubmitResult(
             submitted=response.status_code in {200, 201, 202, 204},
             status_code=response.status_code,

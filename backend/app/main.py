@@ -330,6 +330,57 @@ def create_app(
         responses.delete_saved_form(url)
         return {"ok": True}
 
+    @app.get("/api/debug/ms-form-inspect")
+    def debug_ms_form_inspect(url: str):
+        """Diagnostic endpoint: returns raw scraped data for a Microsoft Forms URL."""
+        import httpx as _httpx
+        from app.services.microsoft_forms import (
+            extract_microsoft_form_id,
+            _extract_prefetch_form_url,
+            _extract_json_values,
+            _find_submit_url_in_html,
+            _construct_submit_url_from_data,
+        )
+        try:
+            form_id = extract_microsoft_form_id(url)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        with _httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            page = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            prefetch_url = _extract_prefetch_form_url(page.text)
+            runtime_status = None
+            runtime_top_keys: list[str] | None = None
+            runtime_data: dict | None = None
+            runtime_text_preview: str | None = None
+            if prefetch_url:
+                r = client.get(prefetch_url, headers={"Accept": "application/json", "User-Agent": "Mozilla/5.0"})
+                runtime_status = r.status_code
+                try:
+                    runtime_data = r.json()
+                    runtime_top_keys = list(runtime_data.keys()) if isinstance(runtime_data, dict) else None
+                    constructed = _construct_submit_url_from_data(runtime_data) if isinstance(runtime_data, dict) else ""
+                except Exception:
+                    runtime_text_preview = r.text[:800]
+                    constructed = ""
+            else:
+                constructed = ""
+            html_blobs = _extract_json_values(page.text)
+            regex_hit = _find_submit_url_in_html(page.text)
+        return {
+            "form_id": form_id,
+            "page_status": page.status_code,
+            "page_final_url": str(page.url),
+            "page_size": len(page.text),
+            "prefetch_url": prefetch_url,
+            "runtime_status": runtime_status,
+            "runtime_top_keys": runtime_top_keys,
+            "runtime_constructed_submit_url": constructed,
+            "runtime_data": runtime_data,
+            "runtime_text_preview": runtime_text_preview,
+            "html_json_blobs_count": len(html_blobs),
+            "regex_submit_url_found": regex_hit or None,
+        }
+
     return app
 
 
