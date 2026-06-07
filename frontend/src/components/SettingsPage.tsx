@@ -1,6 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { themeOptions, type MiraLinkPreferences, type ThemeName } from "../types";
+import { themeOptions, type MiraLinkPreferences, type ThemeName, type Voice } from "../types";
+
+const ENGINE_LABELS: Record<string, string> = {
+  browser: "Navegador",
+  piper: "Piper",
+  kokoro: "Kokoro",
+};
 
 type SettingsPageProps = {
   preferences: MiraLinkPreferences;
@@ -8,6 +14,10 @@ type SettingsPageProps = {
   error: string | null;
   saved: boolean;
   diagnostics?: ReactNode;
+  /** Catálogo de voces disponibles (navegador + backend) para el selector. */
+  ttsVoices?: Voice[];
+  /** Falso si el navegador no expone ninguna voz en este dispositivo. */
+  ttsBrowserSupported?: boolean;
   onSave: (preferences: MiraLinkPreferences) => Promise<boolean> | boolean;
   onReturnToForm?: () => void;
 };
@@ -59,10 +69,23 @@ export function SettingsPage({
   error,
   saved,
   diagnostics,
+  ttsVoices = [],
+  ttsBrowserSupported = true,
   onSave,
   onReturnToForm,
 }: SettingsPageProps) {
   const [draft, setDraft] = useState(preferences);
+
+  // Voces agrupadas por motor para el desplegable (Navegador / Piper / …).
+  const voicesByEngine = useMemo(() => {
+    const groups = new Map<string, Voice[]>();
+    for (const voice of ttsVoices) {
+      const list = groups.get(voice.engine) ?? [];
+      list.push(voice);
+      groups.set(voice.engine, list);
+    }
+    return groups;
+  }, [ttsVoices]);
 
   useEffect(() => {
     setDraft(preferences);
@@ -287,6 +310,64 @@ export function SettingsPage({
               />
             </label>
           ))}
+        </div>
+
+        <div className="settings-subsection" aria-label="Lectura en voz alta">
+          <h2 className="settings-section-title">Lectura en voz alta</h2>
+          <p className="settings-section-lead">
+            Lee cada pregunta y opción mientras se muestran. La lectura pausa la
+            selección por mirada hasta que termina.
+          </p>
+          <label className="toggle-control">
+            <span>Leer en voz alta</span>
+            <input
+              aria-label="Leer en voz alta"
+              type="checkbox"
+              checked={draft.tts_enabled}
+              onChange={(event) => update("tts_enabled", event.target.checked)}
+            />
+          </label>
+
+          {draft.tts_enabled ? (
+            <>
+              <label className="setting-control setting-control--select">
+                <span>Voz</span>
+                <select
+                  aria-label="Voz"
+                  value={draft.tts_voice_id}
+                  onChange={(event) => update("tts_voice_id", event.target.value)}
+                >
+                  <option value="">Automática</option>
+                  {Array.from(voicesByEngine.entries()).map(([engine, voices]) => (
+                    <optgroup key={engine} label={ENGINE_LABELS[engine] ?? engine}>
+                      {voices.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+
+              <RangeSetting
+                label="Velocidad de voz"
+                value={draft.tts_rate}
+                min={0.5}
+                max={2}
+                step={0.1}
+                suffix="x"
+                onChange={(value) => update("tts_rate", value)}
+              />
+
+              {!ttsBrowserSupported ? (
+                <p className="inline-message inline-message--error">
+                  La voz del navegador no está disponible en este dispositivo.
+                  Elige una voz de backend (Piper) o instala voces del sistema.
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </div>
 
         <div className="settings-actions">

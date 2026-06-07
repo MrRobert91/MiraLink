@@ -6,6 +6,7 @@ import type {
   MiraLinkPreferences,
   MiraLinkProfile,
   SavedForm,
+  Voice,
 } from "../types";
 
 type RuntimeAppConfig = {
@@ -147,6 +148,36 @@ export async function deleteSavedForm(url: string): Promise<void> {
     { method: "DELETE" },
   );
   if (!response.ok) throw new Error(`Error ${response.status}`);
+}
+
+export async function fetchBackendVoices(): Promise<Voice[]> {
+  const response = await fetch(buildApiUrl(resolveApiBaseUrl(), "/api/tts/voices"));
+  return parseJson<Voice[]>(response);
+}
+
+export type TtsPrepareItem = { key: string; text: string };
+
+/**
+ * Pide al backend que genere (o reutilice del caché) los audios de un
+ * formulario y devuelve un mapa `key -> URL absoluta` lista para <audio>.
+ */
+export async function prepareFormAudio(
+  formId: string,
+  voiceId: string,
+  items: TtsPrepareItem[],
+): Promise<Record<string, string>> {
+  const base = resolveApiBaseUrl();
+  const response = await fetch(buildApiUrl(base, "/api/tts/prepare"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ form_id: formId, voice_id: voiceId, items }),
+  });
+  const data = await parseJson<{ voice_id: string; items: Record<string, string> }>(response);
+  const absolute: Record<string, string> = {};
+  for (const [key, relativeUrl] of Object.entries(data.items)) {
+    absolute[key] = buildApiUrl(base, relativeUrl);
+  }
+  return absolute;
 }
 
 export async function getProfile(): Promise<MiraLinkProfile> {

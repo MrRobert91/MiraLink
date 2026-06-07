@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,13 @@ from app.services.external_forms import import_external_form, submit_external_fo
 from app.services.form_responses import SqliteFormResponseStore
 from app.services.google_forms import GoogleFormError
 from app.services.profiles import ProfilePreferences, SqliteProfileStore, UserProfile
+from app.services.tts import (
+    TtsCache,
+    TtsError,
+    TtsService,
+    Voice,
+    build_default_registry,
+)
 
 
 class GoogleFormImportRequest(BaseModel):
@@ -53,6 +60,22 @@ class SaveFormRequest(BaseModel):
     provider: str
 
 
+class TtsPrepareItem(BaseModel):
+    key: str
+    text: str
+
+
+class TtsPrepareRequest(BaseModel):
+    form_id: str
+    voice_id: str
+    items: list[TtsPrepareItem]
+
+
+class TtsPrepareResponse(BaseModel):
+    voice_id: str
+    items: dict[str, str]
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
@@ -62,6 +85,7 @@ def create_app(
     settings: Settings | None = None,
     profile_store: SqliteProfileStore | None = None,
     response_store: SqliteFormResponseStore | None = None,
+    tts_service: TtsService | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
@@ -76,6 +100,12 @@ def create_app(
 
     profiles = profile_store or SqliteProfileStore(Path(app_settings.profile_db_path))
     responses = response_store or SqliteFormResponseStore(Path(app_settings.responses_db_path))
+    tts = tts_service or TtsService(
+        registry=build_default_registry(app_settings.tts_models_dir),
+        cache=TtsCache(app_settings.tts_cache_dir, app_settings.tts_cache_db_path),
+        cache_max_mb=app_settings.tts_cache_max_mb,
+        cache_ttl_days=app_settings.tts_cache_ttl_days,
+    )
 
     @app.get("/health")
     def healthcheck() -> dict[str, str]:
@@ -231,6 +261,32 @@ def create_app(
     def delete_saved_form_endpoint(url: str):
         responses.delete_saved_form(url)
         return {"ok": True}
+
+    @app.get("/api/tts/voices", response_model=list[Voice])
+    def list_tts_voices() -> list[Voice]:
+        return tts.list_voices()
+
+    @app.post("/api/tts/prepare", response_model=TtsPrepareResponse)
+    def prepare_tts(payload: TtsPrepareRequest) -> TtsPrepareResponse:
+        try:
+            urls = tts.prepare(
+                payload.form_id,
+                payload.voice_id,
+                [(item.key, item.text) for item in payload.items],
+            )
+        except TtsError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("tts prepare failed form_id=%s voice=%s", payload.form_id, payload.voice_id)
+            raise HTTPException(status_code=502, detail="No se pudieron generar los audios.") from exc
+        return TtsPrepareResponse(voice_id=payload.voice_id, items=urls)
+
+    @app.get("/api/tts/audio")
+    def get_tts_audio(form_id: str, voice_id: str, hash: str):
+        path = tts.resolve_audio(form_id, voice_id, hash)
+        if path is None:
+            raise HTTPException(status_code=404, detail="Audio no encontrado.")
+        return FileResponse(path, media_type="audio/wav")
 
     return app
 

@@ -76,6 +76,21 @@ export type RawGazeMappingOptions = {
   invertVertical: boolean;
 };
 
+export type TtsEngineName = "browser" | "piper" | "kokoro";
+
+/**
+ * Una voz disponible para lectura en voz alta. Las voces de navegador se
+ * descubren en runtime con `speechSynthesis.getVoices()`; las de backend
+ * (piper, kokoro, …) llegan del catálogo `GET /api/tts/voices`. El `id` de las
+ * voces de backend viene cualificado por motor, p. ej. "piper:es_ES-davefx-medium".
+ */
+export type Voice = {
+  id: string;
+  label: string;
+  engine: TtsEngineName | string;
+  lang: string;
+};
+
 export type FormQuestionType = "radio" | "checkbox";
 
 export type FormOption = {
@@ -236,6 +251,10 @@ export type MiraLinkPreferences = {
   eye_rest_enabled: boolean;
   eye_rest_trigger_seconds: number;
   eye_rest_pause_seconds: number;
+  tts_enabled: boolean;
+  /** Vacío = voz automática. "browser:<nombre>" o "<engine>:<voiceId>". */
+  tts_voice_id: string;
+  tts_rate: number;
 };
 
 export const defaultMiraLinkPreferences: MiraLinkPreferences = {
@@ -256,6 +275,9 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   eye_rest_enabled: true,
   eye_rest_trigger_seconds: 10,
   eye_rest_pause_seconds: 60,
+  tts_enabled: false,
+  tts_voice_id: "",
+  tts_rate: 1,
 };
 
 export type MiraLinkProfile = {

@@ -16,18 +16,22 @@ import { SettingsPage } from "./components/SettingsPage";
 import { useCameraStream } from "./hooks/useCameraStream";
 import { useDwellSelection } from "./hooks/useDwellSelection";
 import { useGazeProvider } from "./hooks/useGazeProvider";
+import { useSpeech } from "./hooks/useSpeech";
+import { useTtsVoices } from "./hooks/useTtsVoices";
 import {
   deleteSavedForm,
   getProfile,
   getSavedForms,
   importGoogleForm,
+  prepareFormAudio,
   saveForm,
   submitGoogleForm,
   updateProfile,
 } from "./lib/api";
 import type { SubmitFormPayload } from "./lib/api";
 import { REST_TARGET_ID, resolveBinaryDecisionTarget, resolveRestBand } from "./lib/decisionZone";
-import { createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
+import { buildDecisionSteps, createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
+import { BROWSER_ENGINE, voiceEngine } from "./lib/speech";
 import {
   applyCalibrationToFrame,
   averageFeatureVectors,
@@ -49,6 +53,7 @@ import {
   type GazeFeatureVector,
   type GazeFrame,
   type GazePoint,
+  type ImportedForm,
   type MiraLinkPreferences,
   type SavedForm,
   type ThemeName,
@@ -112,6 +117,11 @@ export default function App() {
   const [eyeRestPauseSeconds, setEyeRestPauseSeconds] = useState(60);
   const [eyeRestPhase, setEyeRestPhase] = useState<"idle" | "prompt" | "resting">("idle");
   const [eyeRestFollowUp, setEyeRestFollowUp] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsVoiceId, setTtsVoiceId] = useState("");
+  const [ttsRate, setTtsRate] = useState(1);
+  // Mapa texto -> URL de audio preparada para voces de backend (Piper, …).
+  const [ttsAudioUrls, setTtsAudioUrls] = useState<Record<string, string>>({});
   const [customQuestionPhase, setCustomQuestionPhase] = useState<"idle" | "compose" | "asking">("idle");
   const [customQuestionText, setCustomQuestionText] = useState("");
   const [auxiliaryAnswers, setAuxiliaryAnswers] = useState<{ question: string; answer: "Sí" | "No" }[]>([]);
@@ -266,10 +276,23 @@ export default function App() {
 
   const snapRadius = calibrationModel.sampleCount >= 4 ? 180 : 240;
 
+  const ttsVoices = useTtsVoices();
+  const getAudioUrl = useCallback(
+    (text: string) => ttsAudioUrls[text] ?? null,
+    [ttsAudioUrls],
+  );
+  const { speak: speakText, cancel: cancelSpeech, isSpeaking } = useSpeech({
+    voiceId: ttsVoiceId,
+    rate: ttsRate,
+    getAudioUrl,
+  });
+
   // Mientras hay un overlay activo (descanso o pregunta personalizada), las
   // zonas Sí/No del formulario quedan suspendidas: no se alimenta su dwell.
+  // Mientras se lee una pregunta en voz alta el dwell también se congela, para
+  // que el usuario pueda escuchar sin seleccionar sin querer.
   const overlaysIdle = eyeRestPhase === "idle" && customQuestionPhase === "idle";
-  const formGazePoint = overlaysIdle ? actionablePoint : null;
+  const formGazePoint = overlaysIdle && !isSpeaking ? actionablePoint : null;
 
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
     gazePoint: formGazePoint,
@@ -299,7 +322,7 @@ export default function App() {
     [neutralZonePercent],
   );
 
-  const restGazePoint = eyeRestEnabled && overlaysIdle ? actionablePoint : null;
+  const restGazePoint = eyeRestEnabled && overlaysIdle && !isSpeaking ? actionablePoint : null;
 
   const { dwellProgress: restDwellProgress, resetDwell: resetRestDwell } = useDwellSelection({
     gazePoint: restGazePoint,
@@ -308,6 +331,49 @@ export default function App() {
     onActivate: handleRestDwellActivate,
     resolveTargetId: resolveRestTargetId,
   });
+
+  // Texto que se lee por cada paso: pregunta + opción presentada.
+  const stepSpeechText = (step: { questionTitle: string; optionLabel: string }) =>
+    `${step.questionTitle}. ${step.optionLabel}`;
+
+  // Para voces de backend, genera/reutiliza los audios del formulario al
+  // cargarlo (generación anticipada). Con voz de navegador no hay nada que
+  // preparar y `useSpeech` sintetiza al vuelo.
+  const prepareTtsForForm = useCallback(
+    async (form: ImportedForm) => {
+      if (!ttsEnabled) {
+        setTtsAudioUrls({});
+        return;
+      }
+      const engine = ttsVoiceId ? voiceEngine(ttsVoiceId) : BROWSER_ENGINE;
+      if (engine === BROWSER_ENGINE) {
+        setTtsAudioUrls({});
+        return;
+      }
+      const texts = Array.from(new Set(buildDecisionSteps(form).map(stepSpeechText)));
+      try {
+        const urls = await prepareFormAudio(
+          form.form_id,
+          ttsVoiceId,
+          texts.map((text) => ({ key: text, text })),
+        );
+        setTtsAudioUrls(urls);
+      } catch {
+        // Si la preparación falla, useSpeech cae a la voz del navegador.
+        setTtsAudioUrls({});
+      }
+    },
+    [ttsEnabled, ttsVoiceId],
+  );
+
+  // Lee la pregunta + opción activas al cambiar de paso mientras se responde.
+  useEffect(() => {
+    if (!ttsEnabled || formFlow.status !== "answering" || !activeStep) {
+      cancelSpeech();
+      return;
+    }
+    speakText(stepSpeechText(activeStep));
+  }, [ttsEnabled, formFlow.status, activeStep, speakText, cancelSpeech]);
 
   const handleEyeRestAccept = useCallback(() => {
     setEyeRestPhase("resting");
@@ -446,6 +512,7 @@ export default function App() {
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       dispatchFormFlow({ type: "openCalibrationChoice" });
       resetDwell();
+      void prepareTtsForForm(importedForm);
       setStatusMessage(`Formulario importado: ${importedForm.title}.`);
       try {
         const updated = await saveForm({ form_id: importedForm.form_id, form_title: importedForm.title, form_url: trimmedUrl, provider: importedForm.provider });
@@ -459,7 +526,7 @@ export default function App() {
     } finally {
       setImportingForm(false);
     }
-  }, [formUrl, resetDwell]);
+  }, [formUrl, resetDwell, prepareTtsForForm]);
 
   useEffect(() => {
     let cancelled = false;
@@ -490,6 +557,7 @@ export default function App() {
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       dispatchFormFlow({ type: "openCalibrationChoice" });
       resetDwell();
+      void prepareTtsForForm(importedForm);
       setStatusMessage(`Formulario cargado: ${importedForm.title}.`);
       try {
         const updated = await saveForm({ form_id: importedForm.form_id, form_title: importedForm.title, form_url: url, provider: importedForm.provider });
@@ -503,7 +571,7 @@ export default function App() {
     } finally {
       setImportingForm(false);
     }
-  }, [resetDwell]);
+  }, [resetDwell, prepareTtsForForm]);
 
   const handleDeleteSavedForm = useCallback(async (url: string) => {
     try {
@@ -768,6 +836,9 @@ export default function App() {
         setEyeRestEnabled(preferences.eye_rest_enabled);
         setEyeRestTriggerSeconds(preferences.eye_rest_trigger_seconds);
         setEyeRestPauseSeconds(preferences.eye_rest_pause_seconds);
+        setTtsEnabled(preferences.tts_enabled);
+        setTtsVoiceId(preferences.tts_voice_id);
+        setTtsRate(preferences.tts_rate);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -802,6 +873,9 @@ export default function App() {
       eye_rest_enabled: eyeRestEnabled,
       eye_rest_trigger_seconds: eyeRestTriggerSeconds,
       eye_rest_pause_seconds: eyeRestPauseSeconds,
+      tts_enabled: ttsEnabled,
+      tts_voice_id: ttsVoiceId,
+      tts_rate: ttsRate,
     }),
     [
       dwellMs,
@@ -819,6 +893,9 @@ export default function App() {
       eyeRestEnabled,
       eyeRestTriggerSeconds,
       eyeRestPauseSeconds,
+      ttsEnabled,
+      ttsVoiceId,
+      ttsRate,
     ],
   );
 
@@ -844,6 +921,9 @@ export default function App() {
       setEyeRestEnabled(saved.eye_rest_enabled);
       setEyeRestTriggerSeconds(saved.eye_rest_trigger_seconds);
       setEyeRestPauseSeconds(saved.eye_rest_pause_seconds);
+      setTtsEnabled(saved.tts_enabled);
+      setTtsVoiceId(saved.tts_voice_id);
+      setTtsRate(saved.tts_rate);
       setPreferencesSaved(true);
       return true;
     } catch {
@@ -1140,6 +1220,8 @@ export default function App() {
                 error={preferencesError}
                 saved={preferencesSaved}
                 diagnostics={diagnostics}
+                ttsVoices={ttsVoices.voices}
+                ttsBrowserSupported={ttsVoices.browserSupported}
                 onSave={handleSavePreferences}
                 onReturnToForm={returnToAnswering ? handleReturnToAnswering : undefined}
               />

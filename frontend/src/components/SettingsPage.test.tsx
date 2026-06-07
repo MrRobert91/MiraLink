@@ -114,6 +114,55 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("revela el selector de voz al activar la lectura y guarda la voz elegida", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(true);
+
+    render(
+      <SettingsPage
+        preferences={defaultMiraLinkPreferences}
+        saving={false}
+        error={null}
+        saved={false}
+        onSave={onSave}
+        ttsVoices={[
+          { id: "browser:Helena", label: "Helena (es-ES)", engine: "browser", lang: "es-ES" },
+          { id: "piper:es_ES-davefx-medium", label: "Español (Piper)", engine: "piper", lang: "es-ES" },
+        ]}
+      />,
+    );
+
+    // Con la lectura desactivada (por defecto) no aparece el selector de voz.
+    expect(screen.queryByLabelText("Voz")).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Leer en voz alta"));
+    await user.selectOptions(screen.getByLabelText("Voz"), "piper:es_ES-davefx-medium");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      ...defaultMiraLinkPreferences,
+      tts_enabled: true,
+      tts_voice_id: "piper:es_ES-davefx-medium",
+    });
+  });
+
+  it("avisa cuando el navegador no tiene voces disponibles", () => {
+    render(
+      <SettingsPage
+        preferences={{ ...defaultMiraLinkPreferences, tts_enabled: true }}
+        saving={false}
+        error={null}
+        saved={false}
+        onSave={vi.fn()}
+        ttsBrowserSupported={false}
+      />,
+    );
+
+    expect(
+      screen.getByText(/no está disponible en este dispositivo/i),
+    ).toBeInTheDocument();
+  });
+
   it("cancels changes and returns to the active form", async () => {
     const user = userEvent.setup();
     const onReturnToForm = vi.fn();

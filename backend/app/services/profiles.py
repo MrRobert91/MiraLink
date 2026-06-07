@@ -24,6 +24,9 @@ class ProfilePreferences(BaseModel):
     eye_rest_enabled: bool = True
     eye_rest_trigger_seconds: int = 10
     eye_rest_pause_seconds: int = 60
+    tts_enabled: bool = False
+    tts_voice_id: str = ""
+    tts_rate: float = 1.0
 
 
 class UserProfile(BaseModel):
@@ -64,7 +67,10 @@ class SqliteProfileStore:
                     center_precision INTEGER NOT NULL DEFAULT 50,
                     eye_rest_enabled INTEGER NOT NULL DEFAULT 1,
                     eye_rest_trigger_seconds INTEGER NOT NULL DEFAULT 10,
-                    eye_rest_pause_seconds INTEGER NOT NULL DEFAULT 60
+                    eye_rest_pause_seconds INTEGER NOT NULL DEFAULT 60,
+                    tts_enabled INTEGER NOT NULL DEFAULT 0,
+                    tts_voice_id TEXT NOT NULL DEFAULT '',
+                    tts_rate REAL NOT NULL DEFAULT 1.0
                 );
                 """
             )
@@ -87,6 +93,9 @@ class SqliteProfileStore:
                 "eye_rest_enabled": "INTEGER NOT NULL DEFAULT 1",
                 "eye_rest_trigger_seconds": "INTEGER NOT NULL DEFAULT 10",
                 "eye_rest_pause_seconds": "INTEGER NOT NULL DEFAULT 60",
+                "tts_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "tts_voice_id": "TEXT NOT NULL DEFAULT ''",
+                "tts_rate": "REAL NOT NULL DEFAULT 1.0",
             }
             for column_name, definition in migration_columns.items():
                 if column_name not in existing_columns:
@@ -114,9 +123,10 @@ class SqliteProfileStore:
                     stabilization, horizontal_sensitivity, vertical_sensitivity,
                     theme, high_contrast, use_pitch_assist, invert_vertical_axis,
                     camera_opacity, camera_visible, center_precision,
-                    eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds
+                    eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
+                    tts_enabled, tts_voice_id, tts_rate
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -134,7 +144,10 @@ class SqliteProfileStore:
                     center_precision=excluded.center_precision,
                     eye_rest_enabled=excluded.eye_rest_enabled,
                     eye_rest_trigger_seconds=excluded.eye_rest_trigger_seconds,
-                    eye_rest_pause_seconds=excluded.eye_rest_pause_seconds
+                    eye_rest_pause_seconds=excluded.eye_rest_pause_seconds,
+                    tts_enabled=excluded.tts_enabled,
+                    tts_voice_id=excluded.tts_voice_id,
+                    tts_rate=excluded.tts_rate
                 """,
                 (
                     user_id,
@@ -155,6 +168,9 @@ class SqliteProfileStore:
                     int(preferences.eye_rest_enabled),
                     preferences.eye_rest_trigger_seconds,
                     preferences.eye_rest_pause_seconds,
+                    int(preferences.tts_enabled),
+                    preferences.tts_voice_id,
+                    preferences.tts_rate,
                 ),
             )
         return self.get_profile(user_id)
@@ -168,7 +184,8 @@ class SqliteProfileStore:
                        stabilization, horizontal_sensitivity, vertical_sensitivity,
                        theme, high_contrast, use_pitch_assist, invert_vertical_axis,
                        camera_opacity, camera_visible, center_precision,
-                       eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds
+                       eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
+                       tts_enabled, tts_voice_id, tts_rate
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -195,5 +212,8 @@ class SqliteProfileStore:
                 eye_rest_enabled=bool(preference_row["eye_rest_enabled"]),
                 eye_rest_trigger_seconds=preference_row["eye_rest_trigger_seconds"],
                 eye_rest_pause_seconds=preference_row["eye_rest_pause_seconds"],
+                tts_enabled=bool(preference_row["tts_enabled"]),
+                tts_voice_id=preference_row["tts_voice_id"],
+                tts_rate=preference_row["tts_rate"],
             ),
         )
