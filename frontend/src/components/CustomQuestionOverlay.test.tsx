@@ -11,6 +11,8 @@ function baseProps(overrides: Partial<Parameters<typeof CustomQuestionOverlay>[0
     dwellMs: 3000,
     snapRadius: 180,
     neutralZonePercent: 24,
+    yesLabel: "Sí",
+    noLabel: "No",
     onShow: vi.fn(),
     onAnswer: vi.fn(),
     onCancel: vi.fn(),

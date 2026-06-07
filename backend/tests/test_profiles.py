@@ -46,6 +46,12 @@ def test_profile_store_persists_all_miralink_preferences():
             eye_rest_enabled=False,
             eye_rest_trigger_seconds=15,
             eye_rest_pause_seconds=90,
+            answer_labels="true_false",
+            selection_sound_enabled=True,
+            selection_sound_yes="chime-up",
+            selection_sound_no="chime-down",
+            reading_lock_seconds=6,
+            custom_question_voice_id="piper:es_ES-davefx-medium",
         ),
     )
 
@@ -66,6 +72,12 @@ def test_profile_store_persists_all_miralink_preferences():
     assert preferences.eye_rest_enabled is False
     assert preferences.eye_rest_trigger_seconds == 15
     assert preferences.eye_rest_pause_seconds == 90
+    assert preferences.answer_labels == "true_false"
+    assert preferences.selection_sound_enabled is True
+    assert preferences.selection_sound_yes == "chime-up"
+    assert preferences.selection_sound_no == "chime-down"
+    assert preferences.reading_lock_seconds == 6
+    assert preferences.custom_question_voice_id == "piper:es_ES-davefx-medium"
 
 
 def test_profile_store_migrates_existing_preference_table_without_losing_values():
@@ -101,6 +113,10 @@ def test_profile_store_migrates_existing_preference_table_without_losing_values(
     assert profile.preferences.eye_rest_enabled is True
     assert profile.preferences.eye_rest_trigger_seconds == 10
     assert profile.preferences.eye_rest_pause_seconds == 60
+    assert profile.preferences.answer_labels == "si_no"
+    assert profile.preferences.selection_sound_enabled is False
+    assert profile.preferences.reading_lock_seconds == 4
+    assert profile.preferences.custom_question_voice_id == ""
 
 
 def _workspace_database_path() -> Path:

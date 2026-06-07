@@ -13,11 +13,14 @@ import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
 import { SettingsPage } from "./components/SettingsPage";
+import { ReadyPulse } from "./components/ReadyPulse";
 import { useCameraStream } from "./hooks/useCameraStream";
 import { useDwellSelection } from "./hooks/useDwellSelection";
 import { useGazeProvider } from "./hooks/useGazeProvider";
 import { useSpeech } from "./hooks/useSpeech";
+import { useSelectionSound } from "./hooks/useSelectionSound";
 import { useTtsVoices } from "./hooks/useTtsVoices";
+import { getAnswerLabels } from "./lib/answerLabels";
 import {
   deleteSavedForm,
   getProfile,
@@ -120,6 +123,20 @@ export default function App() {
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [ttsVoiceId, setTtsVoiceId] = useState("");
   const [ttsRate, setTtsRate] = useState(1);
+  const [answerLabelsMode, setAnswerLabelsMode] =
+    useState<MiraLinkPreferences["answer_labels"]>("si_no");
+  const [selectionSoundEnabled, setSelectionSoundEnabled] = useState(false);
+  const [selectionSoundYes, setSelectionSoundYes] = useState("");
+  const [selectionSoundNo, setSelectionSoundNo] = useState("");
+  const [readingLockSeconds, setReadingLockSeconds] = useState(4);
+  const [customQuestionVoiceId, setCustomQuestionVoiceId] = useState("");
+  // Bloqueo de lectura: dwell suspendido al salir cada pregunta (modo sin voz).
+  const [readingLockActive, setReadingLockActive] = useState(false);
+  const [customReadingLock, setCustomReadingLock] = useState(false);
+  // Contador que dispara el pulso visual "ya puedes responder".
+  const [readyPulse, setReadyPulse] = useState(0);
+  // Carga al vuelo del audio de la pregunta personalizada (voz de backend).
+  const [customQuestionLoading, setCustomQuestionLoading] = useState(false);
   // Mapa texto -> URL de audio preparada para voces de backend (Piper, …).
   const [ttsAudioUrls, setTtsAudioUrls] = useState<Record<string, string>>({});
   const [customQuestionPhase, setCustomQuestionPhase] = useState<"idle" | "compose" | "asking">("idle");
@@ -245,17 +262,25 @@ export default function App() {
     return clampPointToViewport(smoothedPoint ?? correctedPoint);
   }, [calibrationActive, correctedPoint, rawPoint, smoothedPoint]);
 
+  const selectionSound = useSelectionSound({
+    enabled: selectionSoundEnabled,
+    yesSoundId: selectionSoundYes,
+    noSoundId: selectionSoundNo,
+  });
+
   const handleAnswerYes = useCallback(() => {
+    selectionSound.playYes();
     const label = activeStep?.optionLabel;
     dispatchFormFlow({ type: "answerYes" });
     setStatusMessage(label ? `Respuesta registrada: Si a "${label}".` : "Respuesta Si registrada.");
-  }, [activeStep?.optionLabel]);
+  }, [activeStep?.optionLabel, selectionSound]);
 
   const handleAnswerNo = useCallback(() => {
+    selectionSound.playNo();
     const label = activeStep?.optionLabel;
     dispatchFormFlow({ type: "answerNo" });
     setStatusMessage(label ? `Respuesta registrada: No a "${label}".` : "Respuesta No registrada.");
-  }, [activeStep?.optionLabel]);
+  }, [activeStep?.optionLabel, selectionSound]);
 
   const handleActivateTarget = useCallback(
     (targetId: string) => {
@@ -275,16 +300,36 @@ export default function App() {
   );
 
   const snapRadius = calibrationModel.sampleCount >= 4 ? 180 : 240;
+  const answerLabels = getAnswerLabels(answerLabelsMode);
 
   const ttsVoices = useTtsVoices();
   const getAudioUrl = useCallback(
     (text: string) => ttsAudioUrls[text] ?? null,
     [ttsAudioUrls],
   );
+  // Pulso visual "ya puedes responder": se incrementa al desbloquear la lectura
+  // (sin voz) o al terminar la locución de una pregunta (con voz).
+  const triggerReadyPulse = useCallback(() => setReadyPulse((value) => value + 1), []);
+
   const { speak: speakText, cancel: cancelSpeech, isSpeaking } = useSpeech({
     voiceId: ttsVoiceId,
     rate: ttsRate,
     getAudioUrl,
+    onEnd: triggerReadyPulse,
+  });
+
+  // Voz independiente para las preguntas personalizadas. Vacío = misma que la
+  // encuesta. Comparte el mapa de audios (clave = texto) con la voz principal.
+  const effectiveCustomVoiceId = customQuestionVoiceId || ttsVoiceId;
+  const {
+    speak: speakCustom,
+    cancel: cancelCustomSpeech,
+    isSpeaking: isCustomSpeaking,
+  } = useSpeech({
+    voiceId: effectiveCustomVoiceId,
+    rate: ttsRate,
+    getAudioUrl,
+    onEnd: triggerReadyPulse,
   });
 
   // Mientras hay un overlay activo (descanso o pregunta personalizada), las
@@ -292,7 +337,8 @@ export default function App() {
   // Mientras se lee una pregunta en voz alta el dwell también se congela, para
   // que el usuario pueda escuchar sin seleccionar sin querer.
   const overlaysIdle = eyeRestPhase === "idle" && customQuestionPhase === "idle";
-  const formGazePoint = overlaysIdle && !isSpeaking ? actionablePoint : null;
+  const formGazePoint =
+    overlaysIdle && !isSpeaking && !readingLockActive ? actionablePoint : null;
 
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
     gazePoint: formGazePoint,
@@ -322,7 +368,10 @@ export default function App() {
     [neutralZonePercent],
   );
 
-  const restGazePoint = eyeRestEnabled && overlaysIdle && !isSpeaking ? actionablePoint : null;
+  const restGazePoint =
+    eyeRestEnabled && overlaysIdle && !isSpeaking && !readingLockActive
+      ? actionablePoint
+      : null;
 
   const { dwellProgress: restDwellProgress, resetDwell: resetRestDwell } = useDwellSelection({
     gazePoint: restGazePoint,
@@ -375,6 +424,37 @@ export default function App() {
     speakText(stepSpeechText(activeStep));
   }, [ttsEnabled, formFlow.status, activeStep, speakText, cancelSpeech]);
 
+  // Bloqueo de lectura (modo sin voz): al aparecer cada pregunta se suspende el
+  // dwell durante los segundos configurados para dar tiempo a leer; al expirar,
+  // se dispara el pulso "ya puedes responder". Con voz, el bloqueo lo da
+  // `isSpeaking` y el pulso lo dispara el fin de la locución (onEnd).
+  useEffect(() => {
+    if (formFlow.status !== "answering" || !activeStep || ttsEnabled || readingLockSeconds <= 0) {
+      setReadingLockActive(false);
+      return;
+    }
+    setReadingLockActive(true);
+    const timeout = window.setTimeout(() => {
+      setReadingLockActive(false);
+      triggerReadyPulse();
+    }, readingLockSeconds * 1000);
+    return () => window.clearTimeout(timeout);
+  }, [formFlow.status, activeStep, ttsEnabled, readingLockSeconds, triggerReadyPulse]);
+
+  // Mismo bloqueo de lectura para las preguntas personalizadas sin voz.
+  useEffect(() => {
+    if (customQuestionPhase !== "asking" || ttsEnabled || readingLockSeconds <= 0) {
+      setCustomReadingLock(false);
+      return;
+    }
+    setCustomReadingLock(true);
+    const timeout = window.setTimeout(() => {
+      setCustomReadingLock(false);
+      triggerReadyPulse();
+    }, readingLockSeconds * 1000);
+    return () => window.clearTimeout(timeout);
+  }, [customQuestionPhase, ttsEnabled, readingLockSeconds, triggerReadyPulse]);
+
   const handleEyeRestAccept = useCallback(() => {
     setEyeRestPhase("resting");
   }, []);
@@ -397,27 +477,64 @@ export default function App() {
     setCustomQuestionPhase("compose");
   }, []);
 
-  const handleShowCustomQuestion = useCallback((text: string) => {
-    setCustomQuestionText(text);
-    setCustomQuestionPhase("asking");
-  }, []);
+  const handleShowCustomQuestion = useCallback(
+    async (text: string) => {
+      setCustomQuestionText(text);
+
+      // Si la lectura en voz alta está activa y la voz personalizada es de
+      // backend, hay que generar el audio al vuelo y esperar antes de mostrar la
+      // pregunta para poder leerla con esa misma voz. Con voz de navegador se
+      // muestra y se lee directamente.
+      if (ttsEnabled) {
+        const engine = effectiveCustomVoiceId
+          ? voiceEngine(effectiveCustomVoiceId)
+          : BROWSER_ENGINE;
+        if (engine !== BROWSER_ENGINE) {
+          setCustomQuestionLoading(true);
+          try {
+            const urls = await prepareFormAudio("custom-question", effectiveCustomVoiceId, [
+              { key: text, text },
+            ]);
+            setTtsAudioUrls((previous) => ({ ...previous, ...urls }));
+          } catch {
+            // Si falla la preparación, useSpeech caerá a la voz del navegador.
+          } finally {
+            setCustomQuestionLoading(false);
+          }
+        }
+      }
+
+      setCustomQuestionPhase("asking");
+      if (ttsEnabled) {
+        speakCustom(text);
+      }
+    },
+    [ttsEnabled, effectiveCustomVoiceId, speakCustom],
+  );
 
   const handleAnswerCustomQuestion = useCallback(
     (answer: "Sí" | "No") => {
+      if (answer === "Sí") {
+        selectionSound.playYes();
+      } else {
+        selectionSound.playNo();
+      }
+      cancelCustomSpeech();
       setAuxiliaryAnswers((previous) => [...previous, { question: customQuestionText, answer }]);
       setCustomQuestionPhase("idle");
       setCustomQuestionText("");
       resetDwell();
       setStatusMessage(`Pregunta auxiliar registrada: ${answer}.`);
     },
-    [customQuestionText, resetDwell],
+    [customQuestionText, resetDwell, selectionSound, cancelCustomSpeech],
   );
 
   const handleCancelCustomQuestion = useCallback(() => {
+    cancelCustomSpeech();
     setCustomQuestionPhase("idle");
     setCustomQuestionText("");
     resetDwell();
-  }, [resetDwell]);
+  }, [resetDwell, cancelCustomSpeech]);
 
   // Si se sale del modo de respuesta (pausa, ajustes, reinicio), se cierra
   // cualquier overlay pendiente (descanso o pregunta personalizada).
@@ -839,6 +956,12 @@ export default function App() {
         setTtsEnabled(preferences.tts_enabled);
         setTtsVoiceId(preferences.tts_voice_id);
         setTtsRate(preferences.tts_rate);
+        setAnswerLabelsMode(preferences.answer_labels);
+        setSelectionSoundEnabled(preferences.selection_sound_enabled);
+        setSelectionSoundYes(preferences.selection_sound_yes);
+        setSelectionSoundNo(preferences.selection_sound_no);
+        setReadingLockSeconds(preferences.reading_lock_seconds);
+        setCustomQuestionVoiceId(preferences.custom_question_voice_id);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -876,6 +999,12 @@ export default function App() {
       tts_enabled: ttsEnabled,
       tts_voice_id: ttsVoiceId,
       tts_rate: ttsRate,
+      answer_labels: answerLabelsMode,
+      selection_sound_enabled: selectionSoundEnabled,
+      selection_sound_yes: selectionSoundYes,
+      selection_sound_no: selectionSoundNo,
+      reading_lock_seconds: readingLockSeconds,
+      custom_question_voice_id: customQuestionVoiceId,
     }),
     [
       dwellMs,
@@ -896,6 +1025,12 @@ export default function App() {
       ttsEnabled,
       ttsVoiceId,
       ttsRate,
+      answerLabelsMode,
+      selectionSoundEnabled,
+      selectionSoundYes,
+      selectionSoundNo,
+      readingLockSeconds,
+      customQuestionVoiceId,
     ],
   );
 
@@ -924,6 +1059,12 @@ export default function App() {
       setTtsEnabled(saved.tts_enabled);
       setTtsVoiceId(saved.tts_voice_id);
       setTtsRate(saved.tts_rate);
+      setAnswerLabelsMode(saved.answer_labels);
+      setSelectionSoundEnabled(saved.selection_sound_enabled);
+      setSelectionSoundYes(saved.selection_sound_yes);
+      setSelectionSoundNo(saved.selection_sound_no);
+      setReadingLockSeconds(saved.reading_lock_seconds);
+      setCustomQuestionVoiceId(saved.custom_question_voice_id);
       setPreferencesSaved(true);
       return true;
     } catch {
@@ -1058,10 +1199,15 @@ export default function App() {
         <CustomQuestionOverlay
           phase={customQuestionPhase}
           question={customQuestionText}
-          gazePoint={actionablePoint}
+          gazePoint={
+            isCustomSpeaking || customQuestionLoading || customReadingLock ? null : actionablePoint
+          }
           dwellMs={dwellMs}
           snapRadius={snapRadius}
           neutralZonePercent={neutralZonePercent}
+          yesLabel={answerLabels.yes}
+          noLabel={answerLabels.no}
+          loading={customQuestionLoading}
           onShow={handleShowCustomQuestion}
           onAnswer={handleAnswerCustomQuestion}
           onCancel={handleCancelCustomQuestion}
@@ -1097,6 +1243,8 @@ export default function App() {
                   dwellProgress={dwellProgress}
                   restDwellProgress={eyeRestEnabled ? restDwellProgress : 0}
                   neutralZonePercent={neutralZonePercent}
+                  yesLabel={answerLabels.yes}
+                  noLabel={answerLabels.no}
                   submitting={submittingForm}
                   submitMessage={submitMessage}
                   registerTarget={registerTarget}
@@ -1196,6 +1344,8 @@ export default function App() {
                     focusedTargetId={focusedKeyId}
                     dwellProgress={dwellProgress}
                     neutralZonePercent={neutralZonePercent}
+                    yesLabel={answerLabels.yes}
+                    noLabel={answerLabels.no}
                     submitting={submittingForm}
                     submitMessage={submitMessage}
                     registerTarget={registerTarget}
@@ -1247,6 +1397,8 @@ export default function App() {
           <span className="gaze-cursor__dot" />
         </div>
       ) : null}
+
+      {immersive ? <ReadyPulse trigger={readyPulse} /> : null}
     </div>
   );
 }

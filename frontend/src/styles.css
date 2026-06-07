@@ -1109,7 +1109,8 @@ input[type="range"] {
   justify-self: center;
 }
 
-.answering-settings-button {
+.answering-settings-button,
+.answering-custom-question-button {
   min-height: 42px;
   padding: 9px 16px;
 }
@@ -1864,7 +1865,8 @@ input[type="range"] {
     display: none;
   }
 
-  .answering-settings-button {
+  .answering-settings-button,
+  .answering-custom-question-button {
     padding: 8px 10px;
     font-size: 0.82rem;
   }
@@ -2051,6 +2053,122 @@ input[type="range"] {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* Etiqueta de un ajuste junto a su icono de ayuda. */
+.setting-control__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-control > span.setting-control__label {
+  justify-content: flex-start;
+}
+
+/* Tooltip de ayuda (icono ⓘ + burbuja al hover/focus). */
+.setting-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.setting-tooltip__icon {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+  cursor: help;
+}
+
+.setting-tooltip__bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.setting-tooltip:hover .setting-tooltip__bubble,
+.setting-tooltip:focus-within .setting-tooltip__bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Selector de sonido con botón de previsualización. */
+.setting-control__sound-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.setting-control__sound-row select {
+  flex: 1;
+}
+
+.sound-preview-button {
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--accent);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.sound-preview-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pulso "ya puedes responder": anillo del color del tema a pantalla completa. */
+.ready-pulse {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 94;
+}
+
+.ready-pulse__ring {
+  width: 40vmin;
+  height: 40vmin;
+  border-radius: 50%;
+  border: 6px solid var(--accent);
+  opacity: 0;
+  animation: ready-pulse 0.7s ease-out forwards;
+}
+
+@keyframes ready-pulse {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

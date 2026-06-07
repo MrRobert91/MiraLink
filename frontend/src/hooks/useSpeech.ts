@@ -13,6 +13,8 @@ type UseSpeechOptions = {
   rate: number;
   /** Para voces de backend: URL de audio ya preparada para un texto, o null. */
   getAudioUrl?: (text: string) => string | null;
+  /** Se invoca solo cuando la locución termina de forma natural (no al cancelar). */
+  onEnd?: () => void;
 };
 
 /**
@@ -21,9 +23,16 @@ type UseSpeechOptions = {
  * saber si la voz es del navegador (SpeechSynthesis) o de backend (audio
  * cacheado). `isSpeaking` es uniforme: así el bloqueo de dwell funciona igual.
  */
-export function useSpeech({ voiceId, rate, getAudioUrl }: UseSpeechOptions) {
+export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOptions) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Ref para no recrear `speak`/`speakBrowser` cada vez que cambia el callback.
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
+  const finishNaturally = useCallback(() => {
+    setIsSpeaking(false);
+    onEndRef.current?.();
+  }, []);
 
   const cancel = useCallback(() => {
     if (isSpeechSynthesisSupported()) {
@@ -52,12 +61,12 @@ export function useSpeech({ voiceId, rate, getAudioUrl }: UseSpeechOptions) {
       }
       utterance.rate = rate;
       utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
+      utterance.onend = () => finishNaturally();
       utterance.onerror = () => setIsSpeaking(false);
       window.speechSynthesis.speak(utterance);
       return true;
     },
-    [voiceId, rate],
+    [voiceId, rate, finishNaturally],
   );
 
   const speak = useCallback(
@@ -74,7 +83,7 @@ export function useSpeech({ voiceId, rate, getAudioUrl }: UseSpeechOptions) {
           const audio = new Audio(url);
           audio.playbackRate = rate;
           audioRef.current = audio;
-          audio.onended = () => setIsSpeaking(false);
+          audio.onended = () => finishNaturally();
           audio.onerror = () => setIsSpeaking(false);
           // Bloquea el dwell ya, antes de que el audio empiece a sonar.
           setIsSpeaking(true);
@@ -96,7 +105,7 @@ export function useSpeech({ voiceId, rate, getAudioUrl }: UseSpeechOptions) {
         setIsSpeaking(false);
       }
     },
-    [voiceId, rate, getAudioUrl, cancel, speakBrowser],
+    [voiceId, rate, getAudioUrl, cancel, speakBrowser, finishNaturally],
   );
 
   // Cancela cualquier locución pendiente al desmontar.

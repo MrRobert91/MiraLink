@@ -27,6 +27,12 @@ class ProfilePreferences(BaseModel):
     tts_enabled: bool = False
     tts_voice_id: str = ""
     tts_rate: float = 1.0
+    answer_labels: str = "si_no"
+    selection_sound_enabled: bool = False
+    selection_sound_yes: str = ""
+    selection_sound_no: str = ""
+    reading_lock_seconds: int = 4
+    custom_question_voice_id: str = ""
 
 
 class UserProfile(BaseModel):
@@ -70,7 +76,13 @@ class SqliteProfileStore:
                     eye_rest_pause_seconds INTEGER NOT NULL DEFAULT 60,
                     tts_enabled INTEGER NOT NULL DEFAULT 0,
                     tts_voice_id TEXT NOT NULL DEFAULT '',
-                    tts_rate REAL NOT NULL DEFAULT 1.0
+                    tts_rate REAL NOT NULL DEFAULT 1.0,
+                    answer_labels TEXT NOT NULL DEFAULT 'si_no',
+                    selection_sound_enabled INTEGER NOT NULL DEFAULT 0,
+                    selection_sound_yes TEXT NOT NULL DEFAULT '',
+                    selection_sound_no TEXT NOT NULL DEFAULT '',
+                    reading_lock_seconds INTEGER NOT NULL DEFAULT 4,
+                    custom_question_voice_id TEXT NOT NULL DEFAULT ''
                 );
                 """
             )
@@ -96,6 +108,12 @@ class SqliteProfileStore:
                 "tts_enabled": "INTEGER NOT NULL DEFAULT 0",
                 "tts_voice_id": "TEXT NOT NULL DEFAULT ''",
                 "tts_rate": "REAL NOT NULL DEFAULT 1.0",
+                "answer_labels": "TEXT NOT NULL DEFAULT 'si_no'",
+                "selection_sound_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "selection_sound_yes": "TEXT NOT NULL DEFAULT ''",
+                "selection_sound_no": "TEXT NOT NULL DEFAULT ''",
+                "reading_lock_seconds": "INTEGER NOT NULL DEFAULT 4",
+                "custom_question_voice_id": "TEXT NOT NULL DEFAULT ''",
             }
             for column_name, definition in migration_columns.items():
                 if column_name not in existing_columns:
@@ -124,9 +142,11 @@ class SqliteProfileStore:
                     theme, high_contrast, use_pitch_assist, invert_vertical_axis,
                     camera_opacity, camera_visible, center_precision,
                     eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
-                    tts_enabled, tts_voice_id, tts_rate
+                    tts_enabled, tts_voice_id, tts_rate,
+                    answer_labels, selection_sound_enabled, selection_sound_yes,
+                    selection_sound_no, reading_lock_seconds, custom_question_voice_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -147,7 +167,13 @@ class SqliteProfileStore:
                     eye_rest_pause_seconds=excluded.eye_rest_pause_seconds,
                     tts_enabled=excluded.tts_enabled,
                     tts_voice_id=excluded.tts_voice_id,
-                    tts_rate=excluded.tts_rate
+                    tts_rate=excluded.tts_rate,
+                    answer_labels=excluded.answer_labels,
+                    selection_sound_enabled=excluded.selection_sound_enabled,
+                    selection_sound_yes=excluded.selection_sound_yes,
+                    selection_sound_no=excluded.selection_sound_no,
+                    reading_lock_seconds=excluded.reading_lock_seconds,
+                    custom_question_voice_id=excluded.custom_question_voice_id
                 """,
                 (
                     user_id,
@@ -171,6 +197,12 @@ class SqliteProfileStore:
                     int(preferences.tts_enabled),
                     preferences.tts_voice_id,
                     preferences.tts_rate,
+                    preferences.answer_labels,
+                    int(preferences.selection_sound_enabled),
+                    preferences.selection_sound_yes,
+                    preferences.selection_sound_no,
+                    preferences.reading_lock_seconds,
+                    preferences.custom_question_voice_id,
                 ),
             )
         return self.get_profile(user_id)
@@ -185,7 +217,9 @@ class SqliteProfileStore:
                        theme, high_contrast, use_pitch_assist, invert_vertical_axis,
                        camera_opacity, camera_visible, center_precision,
                        eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
-                       tts_enabled, tts_voice_id, tts_rate
+                       tts_enabled, tts_voice_id, tts_rate,
+                       answer_labels, selection_sound_enabled, selection_sound_yes,
+                       selection_sound_no, reading_lock_seconds, custom_question_voice_id
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -215,5 +249,11 @@ class SqliteProfileStore:
                 tts_enabled=bool(preference_row["tts_enabled"]),
                 tts_voice_id=preference_row["tts_voice_id"],
                 tts_rate=preference_row["tts_rate"],
+                answer_labels=preference_row["answer_labels"],
+                selection_sound_enabled=bool(preference_row["selection_sound_enabled"]),
+                selection_sound_yes=preference_row["selection_sound_yes"],
+                selection_sound_no=preference_row["selection_sound_no"],
+                reading_lock_seconds=preference_row["reading_lock_seconds"],
+                custom_question_voice_id=preference_row["custom_question_voice_id"],
             ),
         )

@@ -16,6 +16,10 @@ type CustomQuestionOverlayProps = {
   dwellMs: number;
   snapRadius: number;
   neutralZonePercent: number;
+  yesLabel: string;
+  noLabel: string;
+  /** Generando el audio de la pregunta (voz de backend) antes de mostrarla. */
+  loading?: boolean;
   onShow: (text: string) => void;
   onAnswer: (answer: "Sí" | "No") => void;
   onCancel: () => void;
@@ -28,6 +32,9 @@ export function CustomQuestionOverlay({
   dwellMs,
   snapRadius,
   neutralZonePercent,
+  yesLabel,
+  noLabel,
+  loading = false,
   onShow,
   onAnswer,
   onCancel,
@@ -82,16 +89,16 @@ export function CustomQuestionOverlay({
             autoFocus
           />
           <div className="custom-question-compose__actions">
-            <button type="button" className="secondary-button" onClick={onCancel}>
+            <button type="button" className="secondary-button" onClick={onCancel} disabled={loading}>
               Cancelar
             </button>
             <button
               type="button"
               className="primary-button"
-              disabled={trimmed.length === 0}
+              disabled={trimmed.length === 0 || loading}
               onClick={() => onShow(trimmed)}
             >
-              Mostrar al usuario
+              {loading ? "Generando voz..." : "Mostrar al usuario"}
             </button>
           </div>
         </div>
@@ -112,9 +119,9 @@ export function CustomQuestionOverlay({
           }
           restTitle="Pregunta"
           restHint="Mira al lado para responder."
-          yesLabel="Sí"
+          yesLabel={yesLabel}
           yesHint="Mirada a la derecha"
-          noLabel="No"
+          noLabel={noLabel}
           noHint="Mirada a la izquierda"
           focusedTargetId={focusedKeyId}
           dwellProgress={dwellProgress}

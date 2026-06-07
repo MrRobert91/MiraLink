@@ -13,6 +13,8 @@ type BinaryFormPanelProps = {
   dwellProgress: number;
   restDwellProgress?: number;
   neutralZonePercent: number;
+  yesLabel: string;
+  noLabel: string;
   submitting: boolean;
   submitMessage: string | null;
   registerTarget: (id: string) => RefCallback<HTMLElement>;
@@ -32,6 +34,8 @@ export function BinaryFormPanel({
   dwellProgress,
   restDwellProgress = 0,
   neutralZonePercent,
+  yesLabel,
+  noLabel,
   submitting,
   submitMessage,
   registerTarget,
@@ -107,9 +111,9 @@ export function BinaryFormPanel({
         }
         restTitle="Descanso"
         restHint="Mira al centro para leer sin seleccionar."
-        yesLabel="Si"
+        yesLabel={yesLabel}
         yesHint="Mirada a la derecha"
-        noLabel="No"
+        noLabel={noLabel}
         noHint="Mirada a la izquierda"
         focusedTargetId={focusedTargetId}
         dwellProgress={dwellProgress}

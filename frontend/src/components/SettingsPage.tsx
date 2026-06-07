@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { SettingTooltip } from "./SettingTooltip";
+import { answerLabelOptions } from "../lib/answerLabels";
+import { selectionSounds } from "../lib/selectionSounds";
 import { themeOptions, type MiraLinkPreferences, type ThemeName, type Voice } from "../types";
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -7,6 +10,54 @@ const ENGINE_LABELS: Record<string, string> = {
   piper: "Piper",
   kokoro: "Kokoro",
 };
+
+// Textos de ayuda de cada ajuste: qué hace y cuándo subir/bajar o marcarlo.
+const TOOLTIPS = {
+  provider_mode:
+    "Cómo se controla el cursor. «Webcam + MediaPipe» sigue tu mirada con la cámara; «Simulación con puntero» usa el ratón, útil para probar sin cámara.",
+  answer_labels:
+    "Texto que se muestra en las dos zonas de respuesta. Usa «Verdadero / Falso» si encaja mejor con las preguntas del formulario. Solo cambia las etiquetas, no la lógica.",
+  dwell:
+    "Tiempo que debes mantener la mirada en una opción para seleccionarla. Súbelo si se hacen selecciones sin querer; bájalo si responder resulta lento.",
+  neutral_zone:
+    "Ancho de la banda central de descanso donde no se selecciona nada. Súbelo para evitar elecciones accidentales al mirar al centro; bájalo para que las zonas Sí/No sean más grandes.",
+  stabilization:
+    "Cuánto se suaviza el temblor de la mirada en reposo. Súbelo si el cursor vibra mucho; bájalo si notas demasiado retardo al mover los ojos.",
+  horizontal_sensitivity:
+    "Cuánto se desplaza el cursor en horizontal respecto al movimiento de tus ojos. Súbelo si no llegas a los bordes laterales; bájalo si te pasas con poco movimiento.",
+  vertical_sensitivity:
+    "Cuánto se desplaza el cursor en vertical respecto al movimiento de tus ojos. Súbelo si no llegas arriba/abajo; bájalo si el cursor se va demasiado.",
+  center_precision:
+    "Reduce la sensibilidad cerca del centro para afinar sin perder alcance en los bordes. Súbelo si te cuesta quedarte quieto en el centro; bájalo si el centro responde lento.",
+  camera_opacity:
+    "Visibilidad de la imagen de la cámara durante la calibración. Súbela para verte mejor al colocarte; bájala si te distrae.",
+  eye_rest_trigger:
+    "Segundos mirando a la zona de descanso central antes de ofrecer una pausa visual. Súbelo si la pausa aparece demasiado pronto; bájalo para ofrecerla antes.",
+  eye_rest_pause:
+    "Duración de la pausa visual de descanso una vez aceptada. Súbela para descansar más tiempo la vista.",
+  use_pitch_assist:
+    "Usa la inclinación vertical de la cabeza para ayudar a estimar la mirada. Actívalo si el eje vertical es impreciso; desactívalo si mueves mucho la cabeza.",
+  invert_vertical_axis:
+    "Invierte el eje vertical de la mirada. Márcalo solo si al mirar arriba el cursor baja (o viceversa).",
+  camera_visible:
+    "Muestra tu cámara de fondo durante la calibración para ayudarte a colocarte. Desmárcalo si prefieres una pantalla limpia.",
+  eye_rest_enabled:
+    "Permite ofrecer una pausa de descanso visual cuando miras al centro un rato. Desmárcalo si no quieres que aparezca.",
+  tts_enabled:
+    "Lee en voz alta cada pregunta y opción al mostrarse. La lectura congela la selección por mirada hasta que termina, para que puedas escuchar sin elegir sin querer.",
+  tts_voice:
+    "Voz usada para leer las preguntas de la encuesta. «Automática» elige la primera voz en español disponible. Las voces de backend (Piper) suenan más naturales pero requieren conexión.",
+  tts_rate:
+    "Velocidad de la lectura en voz alta. Súbela si la voz va muy lenta; bájala si cuesta entenderla.",
+  custom_question_voice:
+    "Voz para las preguntas personalizadas. «Igual que la encuesta» reutiliza la voz de arriba; puedes elegir una distinta. Con voz de backend, el audio se genera al mostrar la pregunta.",
+  selection_sound_enabled:
+    "Reproduce un sonido al confirmar la respuesta con la mirada, como aviso de qué se ha elegido (uno para Sí y otro para No).",
+  selection_sound_yes: "Sonido que suena al confirmar una respuesta «Sí».",
+  selection_sound_no: "Sonido que suena al confirmar una respuesta «No».",
+  reading_lock:
+    "Cuando la lectura en voz alta está desactivada, bloquea la selección unos segundos al aparecer cada pregunta para darte tiempo a leer sin agobiarte. Al desbloquearse, un pulso del color del tema avisa de que ya puedes responder. 0 lo desactiva.",
+} as const;
 
 type SettingsPageProps = {
   preferences: MiraLinkPreferences;
@@ -29,6 +80,7 @@ type RangeSettingProps = {
   max: number;
   step: number;
   suffix: string;
+  tooltip?: string;
   onChange: (value: number) => void;
 };
 
@@ -39,12 +91,16 @@ function RangeSetting({
   max,
   step,
   suffix,
+  tooltip,
   onChange,
 }: RangeSettingProps) {
   return (
     <label className="setting-control">
       <span>
-        {label}
+        <span className="setting-control__label">
+          {label}
+          {tooltip ? <SettingTooltip label={label} text={tooltip} /> : null}
+        </span>
         <strong>
           {value}
           {suffix}
@@ -75,6 +131,21 @@ export function SettingsPage({
   onReturnToForm,
 }: SettingsPageProps) {
   const [draft, setDraft] = useState(preferences);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Previsualiza un sonido del catálogo al pulsar ▶ junto a su selector.
+  const previewSound = (soundId: string) => {
+    const sound = selectionSounds.find((item) => item.id === soundId);
+    if (!sound) {
+      return;
+    }
+    previewAudioRef.current?.pause();
+    const audio = new Audio(sound.src);
+    previewAudioRef.current = audio;
+    void audio.play().catch(() => {
+      // Reproducción bloqueada por el navegador: ignorar.
+    });
+  };
 
   // Voces agrupadas por motor para el desplegable (Navegador / Piper / …).
   const voicesByEngine = useMemo(() => {
@@ -184,7 +255,10 @@ export function SettingsPage({
 
       <section className="settings-panel" aria-label="Preferencias de MiraLink">
         <label className="setting-control setting-control--select">
-          <span>Modo de entrada</span>
+          <span className="setting-control__label">
+            Modo de entrada
+            <SettingTooltip label="Modo de entrada" text={TOOLTIPS.provider_mode} />
+          </span>
           <select
             aria-label="Modo de entrada"
             value={draft.provider_mode}
@@ -200,6 +274,26 @@ export function SettingsPage({
           </select>
         </label>
 
+        <label className="setting-control setting-control--select">
+          <span className="setting-control__label">
+            Tipo de respuesta
+            <SettingTooltip label="Tipo de respuesta" text={TOOLTIPS.answer_labels} />
+          </span>
+          <select
+            aria-label="Tipo de respuesta"
+            value={draft.answer_labels}
+            onChange={(event) =>
+              update("answer_labels", event.target.value as MiraLinkPreferences["answer_labels"])
+            }
+          >
+            {answerLabelOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="settings-grid">
           <RangeSetting
             label="Dwell"
@@ -208,6 +302,7 @@ export function SettingsPage({
             max={5000}
             step={100}
             suffix=" ms"
+            tooltip={TOOLTIPS.dwell}
             onChange={(value) => update("dwell_ms", value)}
           />
           <RangeSetting
@@ -217,6 +312,7 @@ export function SettingsPage({
             max={40}
             step={1}
             suffix="%"
+            tooltip={TOOLTIPS.neutral_zone}
             onChange={(value) => update("neutral_zone_percent", value)}
           />
           <RangeSetting
@@ -226,6 +322,7 @@ export function SettingsPage({
             max={92}
             step={1}
             suffix="%"
+            tooltip={TOOLTIPS.stabilization}
             onChange={(value) => update("stabilization", value)}
           />
           <RangeSetting
@@ -235,6 +332,7 @@ export function SettingsPage({
             max={4}
             step={0.05}
             suffix="x"
+            tooltip={TOOLTIPS.horizontal_sensitivity}
             onChange={(value) => update("horizontal_sensitivity", value)}
           />
           <RangeSetting
@@ -244,6 +342,7 @@ export function SettingsPage({
             max={4}
             step={0.05}
             suffix="x"
+            tooltip={TOOLTIPS.vertical_sensitivity}
             onChange={(value) => update("vertical_sensitivity", value)}
           />
           <RangeSetting
@@ -253,6 +352,7 @@ export function SettingsPage({
             max={100}
             step={1}
             suffix="%"
+            tooltip={TOOLTIPS.center_precision}
             onChange={(value) => update("center_precision", value)}
           />
           <RangeSetting
@@ -262,6 +362,7 @@ export function SettingsPage({
             max={100}
             step={5}
             suffix="%"
+            tooltip={TOOLTIPS.camera_opacity}
             onChange={(value) => update("camera_opacity", value)}
           />
           <RangeSetting
@@ -271,6 +372,7 @@ export function SettingsPage({
             max={30}
             step={1}
             suffix=" s"
+            tooltip={TOOLTIPS.eye_rest_trigger}
             onChange={(value) => update("eye_rest_trigger_seconds", value)}
           />
           <RangeSetting
@@ -280,33 +382,40 @@ export function SettingsPage({
             max={180}
             step={5}
             suffix=" s"
+            tooltip={TOOLTIPS.eye_rest_pause}
             onChange={(value) => update("eye_rest_pause_seconds", value)}
+          />
+          <RangeSetting
+            label="Bloqueo de lectura"
+            value={draft.reading_lock_seconds}
+            min={0}
+            max={8}
+            step={1}
+            suffix=" s"
+            tooltip={TOOLTIPS.reading_lock}
+            onChange={(value) => update("reading_lock_seconds", value)}
           />
         </div>
 
         <div className="settings-toggles">
-          {[
-            ["use_pitch_assist", "Usar pitch"],
-            ["invert_vertical_axis", "Invertir eje vertical"],
-            ["camera_visible", "Mostrar cámara en calibración"],
-            ["eye_rest_enabled", "Pausa visual de descanso"],
-          ].map(([key, label]) => (
+          {(
+            [
+              ["use_pitch_assist", "Usar pitch", TOOLTIPS.use_pitch_assist],
+              ["invert_vertical_axis", "Invertir eje vertical", TOOLTIPS.invert_vertical_axis],
+              ["camera_visible", "Mostrar cámara en calibración", TOOLTIPS.camera_visible],
+              ["eye_rest_enabled", "Pausa visual de descanso", TOOLTIPS.eye_rest_enabled],
+            ] as const
+          ).map(([key, label, tooltip]) => (
             <label className="toggle-control" key={key}>
-              <span>{label}</span>
+              <span className="setting-control__label">
+                {label}
+                <SettingTooltip label={label} text={tooltip} />
+              </span>
               <input
                 aria-label={label}
                 type="checkbox"
-                checked={Boolean(draft[key as keyof MiraLinkPreferences])}
-                onChange={(event) =>
-                  update(
-                    key as
-                      | "use_pitch_assist"
-                      | "invert_vertical_axis"
-                      | "camera_visible"
-                      | "eye_rest_enabled",
-                    event.target.checked,
-                  )
-                }
+                checked={Boolean(draft[key])}
+                onChange={(event) => update(key, event.target.checked)}
               />
             </label>
           ))}
@@ -319,7 +428,10 @@ export function SettingsPage({
             selección por mirada hasta que termina.
           </p>
           <label className="toggle-control">
-            <span>Leer en voz alta</span>
+            <span className="setting-control__label">
+              Leer en voz alta
+              <SettingTooltip label="Leer en voz alta" text={TOOLTIPS.tts_enabled} />
+            </span>
             <input
               aria-label="Leer en voz alta"
               type="checkbox"
@@ -331,13 +443,42 @@ export function SettingsPage({
           {draft.tts_enabled ? (
             <>
               <label className="setting-control setting-control--select">
-                <span>Voz</span>
+                <span className="setting-control__label">
+                  Voz
+                  <SettingTooltip label="Voz" text={TOOLTIPS.tts_voice} />
+                </span>
                 <select
                   aria-label="Voz"
                   value={draft.tts_voice_id}
                   onChange={(event) => update("tts_voice_id", event.target.value)}
                 >
                   <option value="">Automática</option>
+                  {Array.from(voicesByEngine.entries()).map(([engine, voices]) => (
+                    <optgroup key={engine} label={ENGINE_LABELS[engine] ?? engine}>
+                      {voices.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+
+              <label className="setting-control setting-control--select">
+                <span className="setting-control__label">
+                  Voz de preguntas personalizadas
+                  <SettingTooltip
+                    label="Voz de preguntas personalizadas"
+                    text={TOOLTIPS.custom_question_voice}
+                  />
+                </span>
+                <select
+                  aria-label="Voz de preguntas personalizadas"
+                  value={draft.custom_question_voice_id}
+                  onChange={(event) => update("custom_question_voice_id", event.target.value)}
+                >
+                  <option value="">Igual que la encuesta</option>
                   {Array.from(voicesByEngine.entries()).map(([engine, voices]) => (
                     <optgroup key={engine} label={ENGINE_LABELS[engine] ?? engine}>
                       {voices.map((voice) => (
@@ -357,6 +498,7 @@ export function SettingsPage({
                 max={2}
                 step={0.1}
                 suffix="x"
+                tooltip={TOOLTIPS.tts_rate}
                 onChange={(value) => update("tts_rate", value)}
               />
 
@@ -366,6 +508,70 @@ export function SettingsPage({
                   Elige una voz de backend (Piper) o instala voces del sistema.
                 </p>
               ) : null}
+            </>
+          ) : null}
+        </div>
+
+        <div className="settings-subsection" aria-label="Sonido de selección">
+          <h2 className="settings-section-title">Sonido de selección</h2>
+          <p className="settings-section-lead">
+            Reproduce un aviso sonoro al confirmar la respuesta con la mirada: uno para «Sí» y
+            otro para «No». Útil como confirmación de lo que se ha elegido.
+          </p>
+          <label className="toggle-control">
+            <span className="setting-control__label">
+              Sonido de selección
+              <SettingTooltip
+                label="Sonido de selección"
+                text={TOOLTIPS.selection_sound_enabled}
+              />
+            </span>
+            <input
+              aria-label="Sonido de selección"
+              type="checkbox"
+              checked={draft.selection_sound_enabled}
+              onChange={(event) => update("selection_sound_enabled", event.target.checked)}
+            />
+          </label>
+
+          {draft.selection_sound_enabled ? (
+            <>
+              {(
+                [
+                  ["selection_sound_yes", "Sonido para «Sí»", TOOLTIPS.selection_sound_yes],
+                  ["selection_sound_no", "Sonido para «No»", TOOLTIPS.selection_sound_no],
+                ] as const
+              ).map(([key, label, tooltip]) => (
+                <label className="setting-control setting-control--select" key={key}>
+                  <span className="setting-control__label">
+                    {label}
+                    <SettingTooltip label={label} text={tooltip} />
+                  </span>
+                  <span className="setting-control__sound-row">
+                    <select
+                      aria-label={label}
+                      value={draft[key]}
+                      onChange={(event) => update(key, event.target.value)}
+                    >
+                      <option value="">Ninguno</option>
+                      {selectionSounds.map((sound) => (
+                        <option key={sound.id} value={sound.id}>
+                          {sound.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="sound-preview-button"
+                      aria-label={`Probar ${label}`}
+                      disabled={!draft[key]}
+                      onClick={() => previewSound(draft[key])}
+                    >
+                      ▶
+                    </button>
+                  </span>
+                </label>
+              ))}
             </>
           ) : null}
         </div>

@@ -28,6 +28,8 @@ function renderPanel(step: DecisionStep) {
       focusedTargetId={null}
       dwellProgress={0}
       neutralZonePercent={24}
+      yesLabel="Sí"
+      noLabel="No"
       submitting={false}
       submitMessage={null}
       registerTarget={() => () => undefined}

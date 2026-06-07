@@ -255,7 +255,20 @@ export type MiraLinkPreferences = {
   /** Vacío = voz automática. "browser:<nombre>" o "<engine>:<voiceId>". */
   tts_voice_id: string;
   tts_rate: number;
+  /** Etiquetas visuales de las respuestas binarias. */
+  answer_labels: AnswerLabelMode;
+  selection_sound_enabled: boolean;
+  /** Id de sonido del catálogo para "Sí" (vacío = ninguno). */
+  selection_sound_yes: string;
+  /** Id de sonido del catálogo para "No" (vacío = ninguno). */
+  selection_sound_no: string;
+  /** Segundos de bloqueo de lectura cuando la voz está desactivada (0 = off). */
+  reading_lock_seconds: number;
+  /** Voz para preguntas personalizadas. Vacío = igual que la encuesta. */
+  custom_question_voice_id: string;
 };
+
+export type AnswerLabelMode = "si_no" | "true_false";
 
 export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   language: "es",
@@ -278,6 +291,12 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   tts_enabled: false,
   tts_voice_id: "",
   tts_rate: 1,
+  answer_labels: "si_no",
+  selection_sound_enabled: false,
+  selection_sound_yes: "",
+  selection_sound_no: "",
+  reading_lock_seconds: 4,
+  custom_question_voice_id: "",
 };
 
 export type MiraLinkProfile = {
