@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 @dataclass(slots=True)
 class Settings:
-    app_name: str = "EyeSpeak Gemma API"
+    app_name: str = "MiraLink API"
     allowed_origins: list[str] | None = None
     profile_db_path: str = os.getenv("PROFILE_DB_PATH", "data/profiles.db")
 

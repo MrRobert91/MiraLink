@@ -1,1 +1,1 @@
-"""Backend package for EyeSpeak Gemma."""
+"""Backend package for MiraLink."""

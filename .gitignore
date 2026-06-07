@@ -9,3 +9,6 @@ coverage/
 backend/.env
 frontend/.env
 backend/tests/.tmp/
+
+# Bases de datos SQLite (datos en runtime, no se versionan)
+*.db

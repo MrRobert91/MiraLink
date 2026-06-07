@@ -1,10 +1,23 @@
 # PRD + Arquitectura + Backlog Técnico
 
+> ⚠️ **Documento histórico.** Describe el proyecto original **EyeSpeak Gemma**:
+> un comunicador AAC de eye-typing con predicción Gemma y TTS. El producto pivotó
+> a **MiraLink**, una app para **responder Google Forms y Microsoft Forms con la
+> mirada**, y la maquinaria de predicción/voz/sesiones se ha eliminado del código.
+> Para el estado actual consulta el [README](./README.md). Se conserva este
+> documento como contexto del diseño de eye tracking, calibración y accesibilidad,
+> que siguen vigentes.
+
 ## Proyecto
 
-**Nombre de trabajo:** EyeSpeak Gemma
+**Nombre de trabajo:** MiraLink (originalmente EyeSpeak Gemma)
 
-**Resumen:** Aplicación web de asistencia a la comunicación para personas con movilidad reducida severa que solo pueden interactuar con la mirada. El sistema permite escribir mediante un teclado virtual controlado por eye tracking con webcam estándar, acelera la redacción con predicción de siguiente palabra y frases, y reproduce el texto en voz alta mediante Google Text-to-Speech.
+**Resumen:** Aplicación web que permite a personas con movilidad reducida severa
+**responder formularios de Google Forms y Microsoft Forms usando solo la mirada**,
+mediante eye tracking con webcam estándar, calibración guiada y zonas de decisión
+binarias activadas por permanencia (dwell). Las secciones siguientes describen el
+concepto AAC original (teclado virtual, predicción y TTS) y se mantienen como
+referencia histórica.
 
 **Contexto del hackathon:** Proyecto orientado a la `Gemma 4 Good Hackathon` de Kaggle, con foco principal en `Digital Equity & Inclusivity` y secundarios en `Safety & Trust` y `Health`.
 
