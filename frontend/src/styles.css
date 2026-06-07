@@ -1882,6 +1882,111 @@ input[type="range"] {
   }
 }
 
+/* Anillo de progreso del descanso de la vista sobre la zona neutra. */
+.decision-rest-zone {
+  position: relative;
+}
+
+.decision-rest-zone__rest-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(84px, 10vw, 148px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: conic-gradient(
+    var(--accent) calc(var(--rest-progress, 0) * 360deg),
+    var(--surface) 0
+  );
+  -webkit-mask: radial-gradient(circle, transparent 54%, #000 56%);
+  mask: radial-gradient(circle, transparent 54%, #000 56%);
+  pointer-events: none;
+}
+
+/* Overlay de pausa de descanso (pregunta y cuenta atrás). */
+.eye-rest-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+}
+
+.eye-rest-overlay--prompt {
+  z-index: 35;
+  background:
+    radial-gradient(circle at center, var(--accent-soft), transparent 40%),
+    var(--overlay-bg);
+}
+
+.eye-rest-overlay--resting {
+  z-index: 95;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.eye-rest-prompt {
+  display: grid;
+  gap: clamp(20px, 4vh, 44px);
+  width: min(1100px, 100%);
+}
+
+.eye-rest-prompt__header {
+  text-align: center;
+  display: grid;
+  gap: 8px;
+}
+
+.eye-rest-prompt__header h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+  color: var(--text);
+}
+
+.eye-rest-prompt__header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.3rem);
+}
+
+.eye-rest-prompt .decision-rest-zone--prompt {
+  border-style: solid;
+}
+
+.eye-rest-resting {
+  display: grid;
+  gap: clamp(10px, 2vh, 20px);
+  place-items: center;
+  text-align: center;
+  color: var(--text);
+}
+
+.eye-rest-resting__label {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.8rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.eye-rest-resting__countdown {
+  margin: 0;
+  font-size: clamp(4rem, 16vw, 9rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.eye-rest-resting__hint {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.25rem);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

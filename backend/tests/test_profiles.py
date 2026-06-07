@@ -43,6 +43,9 @@ def test_profile_store_persists_all_miralink_preferences():
             camera_opacity=60,
             camera_visible=False,
             center_precision=70,
+            eye_rest_enabled=False,
+            eye_rest_trigger_seconds=15,
+            eye_rest_pause_seconds=90,
         ),
     )
 
@@ -60,6 +63,9 @@ def test_profile_store_persists_all_miralink_preferences():
     assert preferences.camera_opacity == 60
     assert preferences.camera_visible is False
     assert preferences.center_precision == 70
+    assert preferences.eye_rest_enabled is False
+    assert preferences.eye_rest_trigger_seconds == 15
+    assert preferences.eye_rest_pause_seconds == 90
 
 
 def test_profile_store_migrates_existing_preference_table_without_losing_values():
@@ -92,6 +98,9 @@ def test_profile_store_migrates_existing_preference_table_without_losing_values(
     assert profile.preferences.camera_opacity == 35
     assert profile.preferences.camera_visible is True
     assert profile.preferences.center_precision == 50
+    assert profile.preferences.eye_rest_enabled is True
+    assert profile.preferences.eye_rest_trigger_seconds == 10
+    assert profile.preferences.eye_rest_pause_seconds == 60
 
 
 def _workspace_database_path() -> Path:

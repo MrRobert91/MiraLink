@@ -12,6 +12,7 @@ type BinaryFormPanelProps = {
   status: FormFlowStatus;
   focusedTargetId: string | null;
   dwellProgress: number;
+  restDwellProgress?: number;
   neutralZonePercent: number;
   submitting: boolean;
   submitMessage: string | null;
@@ -30,6 +31,7 @@ export function BinaryFormPanel({
   status,
   focusedTargetId,
   dwellProgress,
+  restDwellProgress = 0,
   neutralZonePercent,
   submitting,
   submitMessage,
@@ -173,6 +175,13 @@ export function BinaryFormPanel({
         <div ref={setRestNode} className="decision-rest-zone" aria-label="Zona de descanso visual">
           <strong>Descanso</strong>
           <span>Mira al centro para leer sin seleccionar.</span>
+          {restDwellProgress > 0 ? (
+            <span
+              className="decision-rest-zone__rest-ring"
+              style={{ "--rest-progress": restDwellProgress } as CSSProperties}
+              aria-hidden="true"
+            />
+          ) : null}
         </div>
 
         <button

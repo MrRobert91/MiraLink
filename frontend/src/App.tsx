@@ -8,6 +8,7 @@ import { GazeOverlayPreview } from "./components/GazeOverlayPreview";
 import { CalibrationCameraBackdrop } from "./components/CalibrationCameraBackdrop";
 import { CalibrationInstructions } from "./components/CalibrationInstructions";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
+import { EyeRestOverlay } from "./components/EyeRestOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
 import { SettingsPage } from "./components/SettingsPage";
@@ -24,7 +25,7 @@ import {
   updateProfile,
 } from "./lib/api";
 import type { SubmitFormPayload } from "./lib/api";
-import { resolveBinaryDecisionTarget } from "./lib/decisionZone";
+import { REST_TARGET_ID, resolveBinaryDecisionTarget, resolveRestBand } from "./lib/decisionZone";
 import { createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
 import {
   applyCalibrationToFrame,
@@ -105,6 +106,11 @@ export default function App() {
   const [cameraOpacity, setCameraOpacity] = useState(35);
   const [cameraVisible, setCameraVisible] = useState(true);
   const [centerPrecision, setCenterPrecision] = useState(50);
+  const [eyeRestEnabled, setEyeRestEnabled] = useState(true);
+  const [eyeRestTriggerSeconds, setEyeRestTriggerSeconds] = useState(10);
+  const [eyeRestPauseSeconds, setEyeRestPauseSeconds] = useState(60);
+  const [eyeRestPhase, setEyeRestPhase] = useState<"idle" | "prompt" | "resting">("idle");
+  const [eyeRestFollowUp, setEyeRestFollowUp] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Listo para calibrar e importar un formulario.");
   const [importingForm, setImportingForm] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -254,13 +260,75 @@ export default function App() {
     [neutralZonePercent],
   );
 
+  const snapRadius = calibrationModel.sampleCount >= 4 ? 180 : 240;
+
+  // Mientras el overlay de descanso está activo, las zonas Sí/No del formulario
+  // quedan suspendidas: no se alimenta su dwell.
+  const formGazePoint = eyeRestPhase === "idle" ? actionablePoint : null;
+
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
-    gazePoint: actionablePoint,
+    gazePoint: formGazePoint,
     dwellMs,
-    snapRadius: calibrationModel.sampleCount >= 4 ? 180 : 240,
+    snapRadius,
     onActivate: handleActivateTarget,
     resolveTargetId: resolveDecisionTargetId,
   });
+
+  // Dwell sobre la zona de descanso: si la mirada permanece en la banda central
+  // el tiempo configurado, se ofrece una pausa visual.
+  const handleRestDwellActivate = useCallback((targetId: string) => {
+    if (targetId === REST_TARGET_ID) {
+      setEyeRestFollowUp(false);
+      setEyeRestPhase("prompt");
+    }
+  }, []);
+
+  const resolveRestTargetId = useCallback(
+    (gazePoint: GazePoint | null, targets: Parameters<typeof resolveRestBand>[0]) => {
+      if (!gazePoint) {
+        return null;
+      }
+      const band = resolveRestBand(targets, neutralZonePercent, window.innerWidth);
+      return gazePoint.x >= band.left && gazePoint.x <= band.right ? REST_TARGET_ID : null;
+    },
+    [neutralZonePercent],
+  );
+
+  const restGazePoint = eyeRestEnabled && eyeRestPhase === "idle" ? actionablePoint : null;
+
+  const { dwellProgress: restDwellProgress, resetDwell: resetRestDwell } = useDwellSelection({
+    gazePoint: restGazePoint,
+    dwellMs: Math.max(eyeRestTriggerSeconds, 1) * 1000,
+    snapRadius,
+    onActivate: handleRestDwellActivate,
+    resolveTargetId: resolveRestTargetId,
+  });
+
+  const handleEyeRestAccept = useCallback(() => {
+    setEyeRestPhase("resting");
+  }, []);
+
+  const handleEyeRestDecline = useCallback(() => {
+    setEyeRestPhase("idle");
+    setEyeRestFollowUp(false);
+    resetRestDwell();
+    resetDwell();
+  }, [resetDwell, resetRestDwell]);
+
+  const handleEyeRestPauseComplete = useCallback(() => {
+    setEyeRestFollowUp(true);
+    setEyeRestPhase("prompt");
+  }, []);
+
+  // Si se sale del modo de respuesta (pausa, ajustes, reinicio), se cierra
+  // cualquier overlay de descanso pendiente.
+  useEffect(() => {
+    if (formFlow.status !== "answering" && eyeRestPhase !== "idle") {
+      setEyeRestPhase("idle");
+      setEyeRestFollowUp(false);
+      resetRestDwell();
+    }
+  }, [eyeRestPhase, formFlow.status, resetRestDwell]);
 
   useEffect(() => {
     frameRef.current = frame;
@@ -649,6 +717,9 @@ export default function App() {
         setCameraOpacity(preferences.camera_opacity);
         setCameraVisible(preferences.camera_visible);
         setCenterPrecision(preferences.center_precision);
+        setEyeRestEnabled(preferences.eye_rest_enabled);
+        setEyeRestTriggerSeconds(preferences.eye_rest_trigger_seconds);
+        setEyeRestPauseSeconds(preferences.eye_rest_pause_seconds);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -680,6 +751,9 @@ export default function App() {
       camera_opacity: cameraOpacity,
       camera_visible: cameraVisible,
       center_precision: centerPrecision,
+      eye_rest_enabled: eyeRestEnabled,
+      eye_rest_trigger_seconds: eyeRestTriggerSeconds,
+      eye_rest_pause_seconds: eyeRestPauseSeconds,
     }),
     [
       dwellMs,
@@ -694,6 +768,9 @@ export default function App() {
       cameraOpacity,
       cameraVisible,
       centerPrecision,
+      eyeRestEnabled,
+      eyeRestTriggerSeconds,
+      eyeRestPauseSeconds,
     ],
   );
 
@@ -716,6 +793,9 @@ export default function App() {
       setCameraOpacity(saved.camera_opacity);
       setCameraVisible(saved.camera_visible);
       setCenterPrecision(saved.center_precision);
+      setEyeRestEnabled(saved.eye_rest_enabled);
+      setEyeRestTriggerSeconds(saved.eye_rest_trigger_seconds);
+      setEyeRestPauseSeconds(saved.eye_rest_pause_seconds);
       setPreferencesSaved(true);
       return true;
     } catch {
@@ -831,6 +911,21 @@ export default function App() {
         />
       ) : null}
 
+      {eyeRestPhase !== "idle" ? (
+        <EyeRestOverlay
+          phase={eyeRestPhase}
+          gazePoint={actionablePoint}
+          dwellMs={dwellMs}
+          snapRadius={snapRadius}
+          neutralZonePercent={neutralZonePercent}
+          pauseSeconds={eyeRestPauseSeconds}
+          followUp={eyeRestFollowUp}
+          onAccept={handleEyeRestAccept}
+          onDecline={handleEyeRestDecline}
+          onPauseComplete={handleEyeRestPauseComplete}
+        />
+      ) : null}
+
       {!immersive ? <AppNavigation onHome={handleResetForm} /> : null}
       <div className="runtime-media-source" aria-hidden="true">
         <video ref={camera.videoRef} autoPlay muted playsInline />
@@ -857,6 +952,7 @@ export default function App() {
                   status={formFlow.status}
                   focusedTargetId={focusedKeyId}
                   dwellProgress={dwellProgress}
+                  restDwellProgress={eyeRestEnabled ? restDwellProgress : 0}
                   neutralZonePercent={neutralZonePercent}
                   submitting={submittingForm}
                   submitMessage={submitMessage}
@@ -1000,7 +1096,7 @@ export default function App() {
         <Route path="*" element={<main className="page-container">Página no encontrada.</main>} />
       </Routes>
 
-      {displayPoint && immersive ? (
+      {displayPoint && immersive && eyeRestPhase !== "resting" ? (
         <div className="gaze-cursor" style={{ left: `${displayPoint.x}px`, top: `${displayPoint.y}px` }}>
           <span className="gaze-cursor__ring" />
           <span className="gaze-cursor__dot" />

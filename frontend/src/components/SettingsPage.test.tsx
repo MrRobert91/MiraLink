@@ -90,6 +90,30 @@ describe("SettingsPage", () => {
     expect(onReturnToForm).not.toHaveBeenCalled();
   });
 
+  it("guarda el ajuste de pausa visual de descanso", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(true);
+
+    render(
+      <SettingsPage
+        preferences={defaultMiraLinkPreferences}
+        saving={false}
+        error={null}
+        saved={false}
+        onSave={onSave}
+      />,
+    );
+
+    // El ajuste viene activado por defecto; al pulsar se desactiva.
+    await user.click(screen.getByLabelText("Pausa visual de descanso"));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      ...defaultMiraLinkPreferences,
+      eye_rest_enabled: false,
+    });
+  });
+
   it("cancels changes and returns to the active form", async () => {
     const user = userEvent.setup();
     const onReturnToForm = vi.fn();
