@@ -11,9 +11,8 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 @dataclass(slots=True)
 class Settings:
-    app_name: str = "EyeSpeak Gemma API"
+    app_name: str = "MiraLink API"
     allowed_origins: list[str] | None = None
-    tts_provider: str = os.getenv("TTS_PROVIDER", "mock")
     profile_db_path: str = os.getenv("PROFILE_DB_PATH", "data/profiles.db")
 
     responses_db_path: str = os.getenv("RESPONSES_DB_PATH", "data/form_responses.db")
@@ -24,7 +23,6 @@ class Settings:
         origins = None if raw_origins.strip() == "*" else [item.strip() for item in raw_origins.split(",") if item.strip()]
         return cls(
             allowed_origins=origins,
-            tts_provider=os.getenv("TTS_PROVIDER", "mock"),
             profile_db_path=os.getenv("PROFILE_DB_PATH", "data/profiles.db"),
             responses_db_path=os.getenv("RESPONSES_DB_PATH", "data/form_responses.db"),
         )

@@ -2,15 +2,10 @@ services:
   backend:
     build:
       context: ./backend
-      args:
-        ENABLE_GEMMA: ${ENABLE_GEMMA:-false}
     env_file:
       - ./backend/.env
     environment:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
-      GEMMA_BASE_URL: ${GEMMA_BASE_URL:-http://host.docker.internal:11434/v1}
-      GEMMA_API_KEY: ${GEMMA_API_KEY:-unused}
-      HF_TOKEN: ${HF_TOKEN:-}
     ports:
       - "8000:8000"
     volumes:

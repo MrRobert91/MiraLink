@@ -5,8 +5,6 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.services.predictor import SuggestionEngine, tokenize
-
 
 class ProfilePreferences(BaseModel):
     language: str = "es"
@@ -28,14 +26,12 @@ class ProfilePreferences(BaseModel):
 class UserProfile(BaseModel):
     user_id: str
     preferences: ProfilePreferences
-    quick_phrases: list[str]
 
 
 class SqliteProfileStore:
     def __init__(self, database_path: Path | str) -> None:
         self._database_path = Path(database_path)
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._seeded_users: set[str] = set()
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -63,19 +59,6 @@ class SqliteProfileStore:
                     camera_opacity INTEGER NOT NULL DEFAULT 35,
                     camera_visible INTEGER NOT NULL DEFAULT 1,
                     center_precision INTEGER NOT NULL DEFAULT 50
-                );
-                CREATE TABLE IF NOT EXISTS phrases (
-                    user_id TEXT NOT NULL,
-                    text TEXT NOT NULL,
-                    usage_count INTEGER NOT NULL DEFAULT 1,
-                    last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (user_id, text)
-                );
-                CREATE TABLE IF NOT EXISTS lexicon (
-                    user_id TEXT NOT NULL,
-                    token TEXT NOT NULL,
-                    frequency INTEGER NOT NULL DEFAULT 1,
-                    PRIMARY KEY (user_id, token)
                 );
                 """
             )
@@ -174,15 +157,6 @@ class SqliteProfileStore:
                 """,
                 (user_id,),
             ).fetchone()
-            phrase_rows = connection.execute(
-                """
-                SELECT text FROM phrases
-                WHERE user_id = ?
-                ORDER BY usage_count DESC, last_used_at DESC
-                LIMIT 6
-                """,
-                (user_id,),
-            ).fetchall()
 
         return UserProfile(
             user_id=user_id,
@@ -202,56 +176,4 @@ class SqliteProfileStore:
                 camera_visible=bool(preference_row["camera_visible"]),
                 center_precision=preference_row["center_precision"],
             ),
-            quick_phrases=[row["text"] for row in phrase_rows],
         )
-
-    def record_phrase(self, user_id: str, phrase: str) -> None:
-        cleaned = " ".join(tokenize(phrase))
-        if not cleaned:
-            return
-        self.ensure_profile(user_id)
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO phrases (user_id, text, usage_count, last_used_at)
-                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, text) DO UPDATE SET
-                    usage_count = usage_count + 1,
-                    last_used_at = CURRENT_TIMESTAMP
-                """,
-                (user_id, cleaned),
-            )
-            for token in tokenize(cleaned):
-                connection.execute(
-                    """
-                    INSERT INTO lexicon (user_id, token, frequency)
-                    VALUES (?, ?, 1)
-                    ON CONFLICT(user_id, token) DO UPDATE SET
-                        frequency = frequency + 1
-                    """,
-                    (user_id, token),
-                )
-
-    def get_lexicon(self, user_id: str) -> dict[str, int]:
-        self.ensure_profile(user_id)
-        with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT token, frequency FROM lexicon WHERE user_id = ?",
-                (user_id,),
-            ).fetchall()
-        return {row["token"]: row["frequency"] for row in rows}
-
-    def hydrate_engine(self, engine: SuggestionEngine, user_id: str) -> None:
-        if user_id in self._seeded_users or engine.has_user_data(user_id):
-            return
-
-        with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT text, usage_count FROM phrases WHERE user_id = ?",
-                (user_id,),
-            ).fetchall()
-
-        for row in rows:
-            for _ in range(row["usage_count"]):
-                engine.learn_phrase(user_id, row["text"])
-        self._seeded_users.add(user_id)
