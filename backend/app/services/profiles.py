@@ -21,6 +21,9 @@ class ProfilePreferences(BaseModel):
     camera_opacity: int = 35
     camera_visible: bool = True
     center_precision: int = 50
+    eye_rest_enabled: bool = True
+    eye_rest_trigger_seconds: int = 10
+    eye_rest_pause_seconds: int = 60
 
 
 class UserProfile(BaseModel):
@@ -58,7 +61,10 @@ class SqliteProfileStore:
                     invert_vertical_axis INTEGER NOT NULL DEFAULT 0,
                     camera_opacity INTEGER NOT NULL DEFAULT 35,
                     camera_visible INTEGER NOT NULL DEFAULT 1,
-                    center_precision INTEGER NOT NULL DEFAULT 50
+                    center_precision INTEGER NOT NULL DEFAULT 50,
+                    eye_rest_enabled INTEGER NOT NULL DEFAULT 1,
+                    eye_rest_trigger_seconds INTEGER NOT NULL DEFAULT 10,
+                    eye_rest_pause_seconds INTEGER NOT NULL DEFAULT 60
                 );
                 """
             )
@@ -78,6 +84,9 @@ class SqliteProfileStore:
                 "camera_opacity": "INTEGER NOT NULL DEFAULT 35",
                 "camera_visible": "INTEGER NOT NULL DEFAULT 1",
                 "center_precision": "INTEGER NOT NULL DEFAULT 50",
+                "eye_rest_enabled": "INTEGER NOT NULL DEFAULT 1",
+                "eye_rest_trigger_seconds": "INTEGER NOT NULL DEFAULT 10",
+                "eye_rest_pause_seconds": "INTEGER NOT NULL DEFAULT 60",
             }
             for column_name, definition in migration_columns.items():
                 if column_name not in existing_columns:
@@ -104,9 +113,10 @@ class SqliteProfileStore:
                     user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                     stabilization, horizontal_sensitivity, vertical_sensitivity,
                     theme, high_contrast, use_pitch_assist, invert_vertical_axis,
-                    camera_opacity, camera_visible, center_precision
+                    camera_opacity, camera_visible, center_precision,
+                    eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -121,7 +131,10 @@ class SqliteProfileStore:
                     invert_vertical_axis=excluded.invert_vertical_axis,
                     camera_opacity=excluded.camera_opacity,
                     camera_visible=excluded.camera_visible,
-                    center_precision=excluded.center_precision
+                    center_precision=excluded.center_precision,
+                    eye_rest_enabled=excluded.eye_rest_enabled,
+                    eye_rest_trigger_seconds=excluded.eye_rest_trigger_seconds,
+                    eye_rest_pause_seconds=excluded.eye_rest_pause_seconds
                 """,
                 (
                     user_id,
@@ -139,6 +152,9 @@ class SqliteProfileStore:
                     preferences.camera_opacity,
                     int(preferences.camera_visible),
                     preferences.center_precision,
+                    int(preferences.eye_rest_enabled),
+                    preferences.eye_rest_trigger_seconds,
+                    preferences.eye_rest_pause_seconds,
                 ),
             )
         return self.get_profile(user_id)
@@ -151,7 +167,8 @@ class SqliteProfileStore:
                 SELECT user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                        stabilization, horizontal_sensitivity, vertical_sensitivity,
                        theme, high_contrast, use_pitch_assist, invert_vertical_axis,
-                       camera_opacity, camera_visible, center_precision
+                       camera_opacity, camera_visible, center_precision,
+                       eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -175,5 +192,8 @@ class SqliteProfileStore:
                 camera_opacity=preference_row["camera_opacity"],
                 camera_visible=bool(preference_row["camera_visible"]),
                 center_precision=preference_row["center_precision"],
+                eye_rest_enabled=bool(preference_row["eye_rest_enabled"]),
+                eye_rest_trigger_seconds=preference_row["eye_rest_trigger_seconds"],
+                eye_rest_pause_seconds=preference_row["eye_rest_pause_seconds"],
             ),
         )

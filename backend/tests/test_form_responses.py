@@ -98,6 +98,73 @@ def test_submission_can_be_reused_and_external_status_updated(tmp_path):
     assert detail["answers"][0]["selected_options"] == ["Si"]
 
 
+def test_auxiliary_answers_are_stored_and_flagged(tmp_path):
+    store = SqliteFormResponseStore(tmp_path / "responses.db")
+    submission_id = store.record_submission(
+        form_id="form-1",
+        form_title="Formulario",
+        form_url="https://docs.google.com/forms/d/e/test/viewform",
+        provider="google",
+        duration_seconds=None,
+        answers=[
+            {
+                "entry_id": "q1",
+                "question_title": "Color favorito",
+                "question_type": "radio",
+                "selected_options": ["Azul"],
+            },
+            {
+                "entry_id": "aux:0",
+                "question_title": "¿Estás cómodo?",
+                "question_type": "radio",
+                "selected_options": ["Sí"],
+                "is_auxiliary": True,
+            },
+        ],
+    )
+
+    detail = store.get_submission(submission_id)
+    assert detail is not None
+    by_title = {a["question_title"]: a for a in detail["answers"]}
+    assert by_title["Color favorito"]["is_auxiliary"] is False
+    assert by_title["¿Estás cómodo?"]["is_auxiliary"] is True
+
+
+def test_csv_separates_and_can_exclude_auxiliary_columns(tmp_path):
+    store = SqliteFormResponseStore(tmp_path / "responses.db")
+    store.record_submission(
+        form_id="form-1",
+        form_title="Formulario",
+        form_url="https://docs.google.com/forms/d/e/test/viewform",
+        provider="google",
+        duration_seconds=None,
+        answers=[
+            {
+                "entry_id": "q1",
+                "question_title": "Color favorito",
+                "question_type": "radio",
+                "selected_options": ["Azul"],
+            },
+            {
+                "entry_id": "aux:0",
+                "question_title": "¿Estás cómodo?",
+                "question_type": "radio",
+                "selected_options": ["No"],
+                "is_auxiliary": True,
+            },
+        ],
+    )
+
+    with_aux = list(csv.DictReader(io.StringIO(store.export_csv())))
+    assert "Color favorito" in with_aux[0]
+    assert "Auxiliar: ¿Estás cómodo?" in with_aux[0]
+    assert with_aux[0]["Auxiliar: ¿Estás cómodo?"] == "No"
+
+    without_aux = list(csv.DictReader(io.StringIO(store.export_csv(include_auxiliary=False))))
+    assert "Color favorito" in without_aux[0]
+    assert "Auxiliar: ¿Estás cómodo?" not in without_aux[0]
+
+
 def test_csv_contains_external_delivery_fields(tmp_path):
     store = SqliteFormResponseStore(tmp_path / "responses.db")
     submission_id = store.record_submission(

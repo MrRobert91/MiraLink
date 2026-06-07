@@ -241,6 +241,24 @@ export function SettingsPage({
             suffix="%"
             onChange={(value) => update("camera_opacity", value)}
           />
+          <RangeSetting
+            label="Tiempo para ofrecer pausa"
+            value={draft.eye_rest_trigger_seconds}
+            min={4}
+            max={30}
+            step={1}
+            suffix=" s"
+            onChange={(value) => update("eye_rest_trigger_seconds", value)}
+          />
+          <RangeSetting
+            label="Duración de la pausa"
+            value={draft.eye_rest_pause_seconds}
+            min={30}
+            max={180}
+            step={5}
+            suffix=" s"
+            onChange={(value) => update("eye_rest_pause_seconds", value)}
+          />
         </div>
 
         <div className="settings-toggles">
@@ -248,6 +266,7 @@ export function SettingsPage({
             ["use_pitch_assist", "Usar pitch"],
             ["invert_vertical_axis", "Invertir eje vertical"],
             ["camera_visible", "Mostrar cámara en calibración"],
+            ["eye_rest_enabled", "Pausa visual de descanso"],
           ].map(([key, label]) => (
             <label className="toggle-control" key={key}>
               <span>{label}</span>
@@ -257,7 +276,11 @@ export function SettingsPage({
                 checked={Boolean(draft[key as keyof MiraLinkPreferences])}
                 onChange={(event) =>
                   update(
-                    key as "use_pitch_assist" | "invert_vertical_axis" | "camera_visible",
+                    key as
+                      | "use_pitch_assist"
+                      | "invert_vertical_axis"
+                      | "camera_visible"
+                      | "eye_rest_enabled",
                     event.target.checked,
                   )
                 }

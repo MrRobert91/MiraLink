@@ -126,6 +126,7 @@ export type FormAnswerRecord = {
   question_title: string;
   question_type: FormQuestionType;
   selected_options: string[];
+  is_auxiliary?: boolean;
 };
 
 export type FormSubmissionSummary = {
@@ -232,6 +233,9 @@ export type MiraLinkPreferences = {
   camera_opacity: number;
   camera_visible: boolean;
   center_precision: number;
+  eye_rest_enabled: boolean;
+  eye_rest_trigger_seconds: number;
+  eye_rest_pause_seconds: number;
 };
 
 export const defaultMiraLinkPreferences: MiraLinkPreferences = {
@@ -249,6 +253,9 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   camera_opacity: 35,
   camera_visible: true,
   center_precision: 50,
+  eye_rest_enabled: true,
+  eye_rest_trigger_seconds: 10,
+  eye_rest_pause_seconds: 60,
 };
 
 export type MiraLinkProfile = {

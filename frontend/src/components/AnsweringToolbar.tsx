@@ -4,6 +4,7 @@ type AnsweringToolbarProps = {
   trackingReady: boolean;
   onExit: () => void;
   onOpenSettings: () => void;
+  onCustomQuestion: () => void;
 };
 
 export function AnsweringToolbar({
@@ -12,6 +13,7 @@ export function AnsweringToolbar({
   trackingReady,
   onExit,
   onOpenSettings,
+  onCustomQuestion,
 }: AnsweringToolbarProps) {
   return (
     <header className="answering-toolbar">
@@ -21,9 +23,16 @@ export function AnsweringToolbar({
       <strong>
         Paso {currentStep} de {totalSteps}
       </strong>
-      <span className={trackingReady ? "tracking-status tracking-status--ready" : "tracking-status"}>
-        {trackingReady ? "Seguimiento listo" : "Inicializando mirada"}
-      </span>
+      {!trackingReady ? (
+        <span className="tracking-status">Inicializando mirada</span>
+      ) : null}
+      <button
+        type="button"
+        className="secondary-button answering-custom-question-button"
+        onClick={onCustomQuestion}
+      >
+        Pregunta personalizada
+      </button>
       <button type="button" className="secondary-button answering-settings-button" onClick={onOpenSettings}>
         Configuración
       </button>

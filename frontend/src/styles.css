@@ -1882,6 +1882,177 @@ input[type="range"] {
   }
 }
 
+/* Barra de progreso del descanso de la vista, bajo la zona neutra, coherente
+   con los dwell de Sí/No. */
+.decision-rest-zone {
+  position: relative;
+  overflow: hidden;
+}
+
+.decision-rest-zone__progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 14px;
+  transform-origin: left center;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Overlay de pausa de descanso (pregunta y cuenta atrás). */
+.eye-rest-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+}
+
+.eye-rest-overlay--prompt {
+  z-index: 35;
+  background:
+    radial-gradient(circle at center, var(--accent-soft), transparent 40%),
+    var(--overlay-bg);
+}
+
+.eye-rest-overlay--resting {
+  z-index: 95;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.eye-rest-prompt {
+  display: grid;
+  gap: clamp(20px, 4vh, 44px);
+  width: min(1100px, 100%);
+}
+
+.eye-rest-prompt__header {
+  text-align: center;
+  display: grid;
+  gap: 8px;
+}
+
+.eye-rest-prompt__header h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+  color: var(--text);
+}
+
+.eye-rest-prompt__header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.3rem);
+}
+
+.eye-rest-resting {
+  display: grid;
+  gap: clamp(10px, 2vh, 20px);
+  place-items: center;
+  text-align: center;
+  color: var(--text);
+}
+
+.eye-rest-resting__label {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.8rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.eye-rest-resting__countdown {
+  margin: 0;
+  font-size: clamp(4rem, 16vw, 9rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.eye-rest-resting__hint {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.25rem);
+}
+
+/* Pregunta personalizada: tarjeta de redacción (facilitador) y botón de cancelar. */
+.custom-question-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.custom-question-compose {
+  width: min(640px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 4vw, 40px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.custom-question-compose__header h2 {
+  margin: 6px 0 8px;
+  color: var(--text);
+}
+
+.custom-question-compose__header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.custom-question-compose__input {
+  width: 100%;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 2px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.custom-question-compose__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.custom-question-cancel {
+  justify-self: center;
+  margin-top: 14px;
+}
+
+/* Admin: conmutador de auxiliares y etiqueta de respuesta auxiliar. */
+.admin-aux-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-answer-aux-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
