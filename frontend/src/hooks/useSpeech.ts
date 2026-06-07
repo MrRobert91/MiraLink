@@ -70,7 +70,13 @@ export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOption
   );
 
   const speak = useCallback(
-    (text: string) => {
+    /**
+     * `audioUrlOverride` permite reproducir un audio recién preparado sin esperar
+     * a que `getAudioUrl` (derivado de estado) se actualice: evita una condición
+     * de carrera al locutar textos generados al vuelo (calibración, descanso,
+     * pregunta personalizada) con voces de backend.
+     */
+    (text: string, audioUrlOverride?: string | null) => {
       cancel();
       if (!text.trim()) {
         return;
@@ -78,7 +84,7 @@ export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOption
       const engine = voiceId ? voiceEngine(voiceId) : BROWSER_ENGINE;
 
       if (engine !== BROWSER_ENGINE) {
-        const url = getAudioUrl?.(text) ?? null;
+        const url = audioUrlOverride ?? getAudioUrl?.(text) ?? null;
         if (url) {
           const audio = new Audio(url);
           audio.playbackRate = rate;

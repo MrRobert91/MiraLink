@@ -6,9 +6,9 @@ import { AnsweringToolbar } from "./components/AnsweringToolbar";
 import { BinaryFormPanel } from "./components/BinaryFormPanel";
 import { GazeOverlayPreview } from "./components/GazeOverlayPreview";
 import { CalibrationCameraBackdrop } from "./components/CalibrationCameraBackdrop";
-import { CalibrationInstructions } from "./components/CalibrationInstructions";
+import { CalibrationInstructions, calibrationSpeechText } from "./components/CalibrationInstructions";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
-import { EyeRestOverlay } from "./components/EyeRestOverlay";
+import { EyeRestOverlay, eyeRestPromptText } from "./components/EyeRestOverlay";
 import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
@@ -332,6 +332,28 @@ export default function App() {
     onEnd: triggerReadyPulse,
   });
 
+  // Prepara (para voces de backend) el audio de un texto generado al vuelo y
+  // devuelve su URL para reproducirlo de inmediato. Cachea también en
+  // `ttsAudioUrls`. Con voz de navegador no hay nada que preparar (devuelve null
+  // y `useSpeech` sintetiza al vuelo).
+  const prepareAudioUrl = useCallback(
+    async (text: string, voiceId: string, cacheKey: string): Promise<string | null> => {
+      const engine = voiceId ? voiceEngine(voiceId) : BROWSER_ENGINE;
+      if (engine === BROWSER_ENGINE) {
+        return null;
+      }
+      try {
+        const urls = await prepareFormAudio(cacheKey, voiceId, [{ key: text, text }]);
+        setTtsAudioUrls((previous) => ({ ...previous, ...urls }));
+        return urls[text] ?? null;
+      } catch {
+        // Si falla la preparación, se reproduce con la voz del navegador.
+        return null;
+      }
+    },
+    [],
+  );
+
   // Mientras hay un overlay activo (descanso o pregunta personalizada), las
   // zonas Sí/No del formulario quedan suspendidas: no se alimenta su dwell.
   // Mientras se lee una pregunta en voz alta el dwell también se congela, para
@@ -416,13 +438,16 @@ export default function App() {
   );
 
   // Lee la pregunta + opción activas al cambiar de paso mientras se responde.
+  // Mientras hay un overlay activo (descanso / pregunta personalizada) no se lee:
+  // así preparar su audio (que cambia `ttsAudioUrls` y, con él, `speakText`) no
+  // re-dispara este efecto y pisa la locución del overlay con la del formulario.
   useEffect(() => {
-    if (!ttsEnabled || formFlow.status !== "answering" || !activeStep) {
+    if (!ttsEnabled || formFlow.status !== "answering" || !activeStep || !overlaysIdle) {
       cancelSpeech();
       return;
     }
     speakText(stepSpeechText(activeStep));
-  }, [ttsEnabled, formFlow.status, activeStep, speakText, cancelSpeech]);
+  }, [ttsEnabled, formFlow.status, activeStep, overlaysIdle, speakText, cancelSpeech]);
 
   // Bloqueo de lectura (modo sin voz): al aparecer cada pregunta se suspende el
   // dwell durante los segundos configurados para dar tiempo a leer; al expirar,
@@ -455,6 +480,45 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [customQuestionPhase, ttsEnabled, readingLockSeconds, triggerReadyPulse]);
 
+  // Lee en voz alta las instrucciones de calibración al abrir su pantalla.
+  useEffect(() => {
+    if (!ttsEnabled || !calibrationInstructionsOpen) {
+      return;
+    }
+    let cancelled = false;
+    const text = calibrationSpeechText(calibrationSequence.length);
+    void (async () => {
+      const url = await prepareAudioUrl(text, ttsVoiceId, "calibration");
+      if (!cancelled) {
+        speakText(text, url);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      cancelSpeech();
+    };
+  }, [ttsEnabled, calibrationInstructionsOpen, ttsVoiceId, prepareAudioUrl, speakText, cancelSpeech]);
+
+  // Lee en voz alta la pregunta de descanso al ofrecer la pausa. El efecto de
+  // locución del formulario queda inhibido por `overlaysIdle`, sin conflicto.
+  useEffect(() => {
+    if (!ttsEnabled || eyeRestPhase !== "prompt") {
+      return;
+    }
+    let cancelled = false;
+    const text = eyeRestPromptText(eyeRestFollowUp);
+    void (async () => {
+      const url = await prepareAudioUrl(text, ttsVoiceId, "eye-rest");
+      if (!cancelled) {
+        speakText(text, url);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      cancelSpeech();
+    };
+  }, [ttsEnabled, eyeRestPhase, eyeRestFollowUp, ttsVoiceId, prepareAudioUrl, speakText, cancelSpeech]);
+
   const handleEyeRestAccept = useCallback(() => {
     setEyeRestPhase("resting");
   }, []);
@@ -485,31 +549,24 @@ export default function App() {
       // backend, hay que generar el audio al vuelo y esperar antes de mostrar la
       // pregunta para poder leerla con esa misma voz. Con voz de navegador se
       // muestra y se lee directamente.
+      let audioUrl: string | null = null;
       if (ttsEnabled) {
         const engine = effectiveCustomVoiceId
           ? voiceEngine(effectiveCustomVoiceId)
           : BROWSER_ENGINE;
         if (engine !== BROWSER_ENGINE) {
           setCustomQuestionLoading(true);
-          try {
-            const urls = await prepareFormAudio("custom-question", effectiveCustomVoiceId, [
-              { key: text, text },
-            ]);
-            setTtsAudioUrls((previous) => ({ ...previous, ...urls }));
-          } catch {
-            // Si falla la preparación, useSpeech caerá a la voz del navegador.
-          } finally {
-            setCustomQuestionLoading(false);
-          }
+          audioUrl = await prepareAudioUrl(text, effectiveCustomVoiceId, "custom-question");
+          setCustomQuestionLoading(false);
         }
       }
 
       setCustomQuestionPhase("asking");
       if (ttsEnabled) {
-        speakCustom(text);
+        speakCustom(text, audioUrl);
       }
     },
-    [ttsEnabled, effectiveCustomVoiceId, speakCustom],
+    [ttsEnabled, effectiveCustomVoiceId, speakCustom, prepareAudioUrl],
   );
 
   const handleAnswerCustomQuestion = useCallback(

@@ -23,6 +23,11 @@ type EyeRestOverlayProps = {
   onPauseComplete: () => void;
 };
 
+/** Texto de la pregunta de descanso, compartido entre la vista y la locución. */
+export function eyeRestPromptText(followUp: boolean): string {
+  return followUp ? "¿Quieres otra pausa de 1 minuto?" : "¿Quieres hacer una pausa de 1 minuto?";
+}
+
 function formatCountdown(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const minutes = Math.floor(safe / 60);
@@ -110,7 +115,7 @@ export function EyeRestOverlay({
           header={
             <header className="eye-rest-prompt__header">
               <p className="eyebrow">Descanso de la vista</p>
-              <h2>{followUp ? "¿Quieres otra pausa de 1 minuto?" : "¿Quieres hacer una pausa de 1 minuto?"}</h2>
+              <h2>{eyeRestPromptText(followUp)}</h2>
               <p>Tus respuestas se conservan. Mira a un lado para elegir.</p>
             </header>
           }

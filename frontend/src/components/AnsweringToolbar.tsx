@@ -17,25 +17,29 @@ export function AnsweringToolbar({
 }: AnsweringToolbarProps) {
   return (
     <header className="answering-toolbar">
-      <button type="button" className="text-button" onClick={onExit}>
-        Salir
-      </button>
-      <strong>
+      <div className="answering-toolbar__left">
+        <button type="button" className="text-button" onClick={onExit}>
+          Salir
+        </button>
+      </div>
+      <strong className="answering-toolbar__step">
         Paso {currentStep} de {totalSteps}
       </strong>
-      {!trackingReady ? (
-        <span className="tracking-status">Inicializando mirada</span>
-      ) : null}
-      <button
-        type="button"
-        className="secondary-button answering-custom-question-button"
-        onClick={onCustomQuestion}
-      >
-        Pregunta personalizada
-      </button>
-      <button type="button" className="secondary-button answering-settings-button" onClick={onOpenSettings}>
-        Configuración
-      </button>
+      <div className="answering-toolbar__right">
+        {!trackingReady ? (
+          <span className="tracking-status">Inicializando mirada</span>
+        ) : null}
+        <button
+          type="button"
+          className="secondary-button answering-custom-question-button"
+          onClick={onCustomQuestion}
+        >
+          Pregunta personalizada
+        </button>
+        <button type="button" className="secondary-button answering-settings-button" onClick={onOpenSettings}>
+          Configuración
+        </button>
+      </div>
     </header>
   );
 }

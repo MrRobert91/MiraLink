@@ -22,7 +22,8 @@ export function ReadyPulse({ trigger }: ReadyPulseProps) {
       return;
     }
     setVisible(true);
-    const timeout = window.setTimeout(() => setVisible(false), 700);
+    // Debe cubrir la animación más larga (anillo retardado): 0.9s + 0.12s delay.
+    const timeout = window.setTimeout(() => setVisible(false), 1050);
     return () => window.clearTimeout(timeout);
   }, [trigger]);
 
@@ -32,7 +33,8 @@ export function ReadyPulse({ trigger }: ReadyPulseProps) {
 
   return (
     <div className="ready-pulse" aria-hidden="true">
-      <span key={trigger} className="ready-pulse__ring" />
+      <span key={`${trigger}-a`} className="ready-pulse__ring" />
+      <span key={`${trigger}-b`} className="ready-pulse__ring ready-pulse__ring--delayed" />
     </div>
   );
 }

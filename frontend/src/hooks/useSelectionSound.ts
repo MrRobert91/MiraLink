@@ -30,6 +30,48 @@ export function useSelectionSound({ enabled, yesSoundId, noSoundId }: UseSelecti
     noAudioRef.current = noSrc ? new Audio(noSrc) : null;
   }, [noSrc]);
 
+  // En el navegador, `Audio.play()` queda bloqueado hasta que el usuario
+  // interactúa con la página. Como la selección es por mirada (sin clic), los
+  // sonidos nunca llegarían a sonar. Al primer gesto real "cebamos" los audios
+  // (play→pause) para habilitar futuras reproducciones disparadas por la mirada.
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) {
+        return;
+      }
+      unlocked = true;
+      for (const audio of [yesAudioRef.current, noAudioRef.current]) {
+        if (!audio) {
+          continue;
+        }
+        void audio
+          .play()
+          .then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+          })
+          .catch(() => {
+            // Si aún no se permite reproducir, se reintentará en el próximo gesto.
+            unlocked = false;
+          });
+      }
+      if (unlocked) {
+        removeListeners();
+      }
+    };
+    const removeListeners = () => {
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+    document.addEventListener("pointerdown", unlock);
+    document.addEventListener("keydown", unlock);
+    return removeListeners;
+  }, [enabled, yesSrc, noSrc]);
+
   const play = useCallback((audio: HTMLAudioElement | null) => {
     if (!audio) {
       return;

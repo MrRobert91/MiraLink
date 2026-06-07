@@ -5,6 +5,20 @@ type CalibrationInstructionsProps = {
 };
 
 /**
+ * Versión hablada de las instrucciones de calibración. Refleja el contenido
+ * visual de la tarjeta para que la locución y el texto no se desincronicen.
+ */
+export function calibrationSpeechText(totalPoints: number): string {
+  return [
+    `Vamos a ajustar el seguimiento a tu mirada. Aparecerán ${totalPoints} puntos de uno en uno por la pantalla. El proceso dura aproximadamente un minuto.`,
+    "Primero, colócate cómodo frente a la cámara, con la cara bien iluminada y centrada en la imagen.",
+    "Segundo, mantén la cabeza quieta durante todo el proceso; mueve solo los ojos.",
+    "Tercero, mira fijamente cada punto que se ilumine hasta que se complete y avance solo al siguiente.",
+    "Y cuarto, evita parpadear de más mientras un punto está activo.",
+  ].join(" ");
+}
+
+/**
  * Pantalla previa a la calibración: explica el proceso con claridad antes de
  * que aparezcan los puntos. El usuario inicia con un botón "Comenzar".
  */
