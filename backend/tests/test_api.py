@@ -66,6 +66,42 @@ def test_generic_forms_submit_endpoint_saves_and_marks_success(monkeypatch, tmp_
     assert store.get_submission(payload["submission_id"])["external_status"] == "sent"
 
 
+def test_auxiliary_answers_are_saved_but_not_sent_to_provider(monkeypatch, tmp_path):
+    sent_answers: dict = {}
+
+    def capture(url, submit_url, answers):
+        sent_answers.update(answers)
+        return {"submitted": True, "status_code": 200, "message": "Formulario enviado."}
+
+    monkeypatch.setattr("app.main.submit_external_form", capture)
+    store = SqliteFormResponseStore(tmp_path / "responses.db")
+    client = TestClient(create_app(response_store=store))
+
+    response = client.post(
+        "/api/forms/submit",
+        json={
+            "url": "https://forms.office.com/r/abc123",
+            "submit_url": "https://forms.office.com/api/submit",
+            "answers": {"q1": ["No"]},
+            "questions": [{"entry_id": "q1", "title": "Respuesta", "type": "radio"}],
+            "auxiliary_answers": [
+                {"question_title": "¿Estás cómodo?", "selected_options": ["Sí"]},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    # La pregunta auxiliar nunca llega al proveedor externo.
+    assert set(sent_answers.keys()) == {"q1"}
+
+    detail = store.get_submission(payload["submission_id"])
+    by_title = {a["question_title"]: a for a in detail["answers"]}
+    assert by_title["Respuesta"]["is_auxiliary"] is False
+    assert by_title["¿Estás cómodo?"]["is_auxiliary"] is True
+    assert by_title["¿Estás cómodo?"]["selected_options"] == ["Sí"]
+
+
 def test_generic_forms_submit_endpoint_saves_provider_rejection(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "app.main.submit_external_form",

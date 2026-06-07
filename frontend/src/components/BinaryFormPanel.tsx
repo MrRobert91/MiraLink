@@ -1,7 +1,6 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, RefCallback } from "react";
+import type { RefCallback } from "react";
 
-import { buildDecisionGridColumns, REST_TARGET_ID } from "../lib/decisionZone";
+import { DecisionZones } from "./DecisionZones";
 import type { DecisionStep, ImportedForm } from "../types";
 import type { FormAnswers, FormFlowStatus } from "../lib/formFlow";
 
@@ -42,45 +41,6 @@ export function BinaryFormPanel({
   onSubmit,
   onReset,
 }: BinaryFormPanelProps) {
-  const restElementRef = useRef<HTMLDivElement | null>(null);
-  const registerRestRef = registerTarget(REST_TARGET_ID);
-  const [restBand, setRestBand] = useState<{ left: number; right: number } | null>(null);
-
-  const setRestNode = useCallback(
-    (node: HTMLDivElement | null) => {
-      restElementRef.current = node;
-      registerRestRef(node);
-    },
-    [registerRestRef],
-  );
-
-  useLayoutEffect(() => {
-    const node = restElementRef.current;
-    if (!node) {
-      setRestBand(null);
-      return;
-    }
-
-    const measure = () => {
-      const rect = node.getBoundingClientRect();
-      setRestBand((previous) => {
-        if (previous && previous.left === rect.left && previous.right === rect.right) {
-          return previous;
-        }
-        return { left: rect.left, right: rect.right };
-      });
-    };
-
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    window.addEventListener("resize", measure);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [neutralZonePercent, step?.questionTitle]);
-
   if (!form) {
     return (
       <section className="binary-panel binary-panel--empty">
@@ -128,73 +88,37 @@ export function BinaryFormPanel({
     );
   }
 
-  const noFocused = focusedTargetId === "decision-no";
-  const yesFocused = focusedTargetId === "decision-yes";
-  const [leftWidth, centerWidth, rightWidth] = buildDecisionGridColumns(neutralZonePercent);
-  const gridStyle: CSSProperties = { gridTemplateColumns: `${leftWidth} ${centerWidth} ${rightWidth}` };
-  const overlayStyle: CSSProperties | undefined = restBand
-    ? ({
-        "--rest-left": `${restBand.left}px`,
-        "--rest-right": `${restBand.right}px`,
-      } as CSSProperties)
-    : undefined;
-
   return (
     <section className="binary-panel" aria-label="Respuesta binaria">
-      {overlayStyle ? (
-        <div className="decision-side-overlays" style={overlayStyle} aria-hidden="true">
-          <span className={`decision-side-overlay decision-side-overlay--no${noFocused ? " decision-side-overlay--active" : ""}`} />
-          <span className={`decision-side-overlay decision-side-overlay--yes${yesFocused ? " decision-side-overlay--active" : ""}`} />
-        </div>
-      ) : null}
-      <header className="binary-question">
-        <p className="question-type-label">
-          {step.questionType === "radio"
-            ? "Respuesta única (radio)"
-            : "Respuesta múltiple (casillas)"}
-        </p>
-        <p className="eyebrow">
-          Pregunta {step.questionIndex + 1}/{step.totalQuestions} - Opcion {step.optionIndex + 1}/{step.totalOptions}
-        </p>
-        <h2>{step.questionTitle}</h2>
-        <p>{step.optionLabel}</p>
-      </header>
-
-      <div className="binary-decision-grid" style={gridStyle}>
-        <button
-          ref={registerTarget("decision-no")}
-          type="button"
-          className={`decision-zone decision-zone--no${noFocused ? " decision-zone--focused" : ""}`}
-          onClick={onAnswerNo}
-        >
-          <span>No</span>
-          <small>Mirada a la izquierda</small>
-          {noFocused ? <span className="decision-zone__progress" style={{ transform: `scaleX(${dwellProgress})` }} /> : null}
-        </button>
-
-        <div ref={setRestNode} className="decision-rest-zone" aria-label="Zona de descanso visual">
-          <strong>Descanso</strong>
-          <span>Mira al centro para leer sin seleccionar.</span>
-          {restDwellProgress > 0 ? (
-            <span
-              className="decision-rest-zone__rest-ring"
-              style={{ "--rest-progress": restDwellProgress } as CSSProperties}
-              aria-hidden="true"
-            />
-          ) : null}
-        </div>
-
-        <button
-          ref={registerTarget("decision-yes")}
-          type="button"
-          className={`decision-zone decision-zone--yes${yesFocused ? " decision-zone--focused" : ""}`}
-          onClick={onAnswerYes}
-        >
-          <span>Si</span>
-          <small>Mirada a la derecha</small>
-          {yesFocused ? <span className="decision-zone__progress" style={{ transform: `scaleX(${dwellProgress})` }} /> : null}
-        </button>
-      </div>
+      <DecisionZones
+        header={
+          <header className="binary-question">
+            <p className="question-type-label">
+              {step.questionType === "radio"
+                ? "Respuesta única (radio)"
+                : "Respuesta múltiple (casillas)"}
+            </p>
+            <p className="eyebrow">
+              Pregunta {step.questionIndex + 1}/{step.totalQuestions} - Opcion {step.optionIndex + 1}/{step.totalOptions}
+            </p>
+            <h2>{step.questionTitle}</h2>
+            <p>{step.optionLabel}</p>
+          </header>
+        }
+        restTitle="Descanso"
+        restHint="Mira al centro para leer sin seleccionar."
+        yesLabel="Si"
+        yesHint="Mirada a la derecha"
+        noLabel="No"
+        noHint="Mirada a la izquierda"
+        focusedTargetId={focusedTargetId}
+        dwellProgress={dwellProgress}
+        restDwellProgress={restDwellProgress}
+        neutralZonePercent={neutralZonePercent}
+        registerTarget={registerTarget}
+        onAnswerYes={onAnswerYes}
+        onAnswerNo={onAnswerNo}
+      />
     </section>
   );
 }

@@ -126,6 +126,7 @@ export type FormAnswerRecord = {
   question_title: string;
   question_type: FormQuestionType;
   selected_options: string[];
+  is_auxiliary?: boolean;
 };
 
 export type FormSubmissionSummary = {

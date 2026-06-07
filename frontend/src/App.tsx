@@ -9,6 +9,7 @@ import { CalibrationCameraBackdrop } from "./components/CalibrationCameraBackdro
 import { CalibrationInstructions } from "./components/CalibrationInstructions";
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { EyeRestOverlay } from "./components/EyeRestOverlay";
+import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
 import { SettingsPage } from "./components/SettingsPage";
@@ -111,6 +112,9 @@ export default function App() {
   const [eyeRestPauseSeconds, setEyeRestPauseSeconds] = useState(60);
   const [eyeRestPhase, setEyeRestPhase] = useState<"idle" | "prompt" | "resting">("idle");
   const [eyeRestFollowUp, setEyeRestFollowUp] = useState(false);
+  const [customQuestionPhase, setCustomQuestionPhase] = useState<"idle" | "compose" | "asking">("idle");
+  const [customQuestionText, setCustomQuestionText] = useState("");
+  const [auxiliaryAnswers, setAuxiliaryAnswers] = useState<{ question: string; answer: "Sí" | "No" }[]>([]);
   const [statusMessage, setStatusMessage] = useState("Listo para calibrar e importar un formulario.");
   const [importingForm, setImportingForm] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -262,9 +266,10 @@ export default function App() {
 
   const snapRadius = calibrationModel.sampleCount >= 4 ? 180 : 240;
 
-  // Mientras el overlay de descanso está activo, las zonas Sí/No del formulario
-  // quedan suspendidas: no se alimenta su dwell.
-  const formGazePoint = eyeRestPhase === "idle" ? actionablePoint : null;
+  // Mientras hay un overlay activo (descanso o pregunta personalizada), las
+  // zonas Sí/No del formulario quedan suspendidas: no se alimenta su dwell.
+  const overlaysIdle = eyeRestPhase === "idle" && customQuestionPhase === "idle";
+  const formGazePoint = overlaysIdle ? actionablePoint : null;
 
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
     gazePoint: formGazePoint,
@@ -294,7 +299,7 @@ export default function App() {
     [neutralZonePercent],
   );
 
-  const restGazePoint = eyeRestEnabled && eyeRestPhase === "idle" ? actionablePoint : null;
+  const restGazePoint = eyeRestEnabled && overlaysIdle ? actionablePoint : null;
 
   const { dwellProgress: restDwellProgress, resetDwell: resetRestDwell } = useDwellSelection({
     gazePoint: restGazePoint,
@@ -320,15 +325,49 @@ export default function App() {
     setEyeRestPhase("prompt");
   }, []);
 
+  // Preguntas auxiliares personalizadas: el facilitador redacta una pregunta que
+  // se superpone al usuario, que responde Sí/No con la mirada. Se guardan aparte.
+  const handleOpenCustomQuestion = useCallback(() => {
+    setCustomQuestionPhase("compose");
+  }, []);
+
+  const handleShowCustomQuestion = useCallback((text: string) => {
+    setCustomQuestionText(text);
+    setCustomQuestionPhase("asking");
+  }, []);
+
+  const handleAnswerCustomQuestion = useCallback(
+    (answer: "Sí" | "No") => {
+      setAuxiliaryAnswers((previous) => [...previous, { question: customQuestionText, answer }]);
+      setCustomQuestionPhase("idle");
+      setCustomQuestionText("");
+      resetDwell();
+      setStatusMessage(`Pregunta auxiliar registrada: ${answer}.`);
+    },
+    [customQuestionText, resetDwell],
+  );
+
+  const handleCancelCustomQuestion = useCallback(() => {
+    setCustomQuestionPhase("idle");
+    setCustomQuestionText("");
+    resetDwell();
+  }, [resetDwell]);
+
   // Si se sale del modo de respuesta (pausa, ajustes, reinicio), se cierra
-  // cualquier overlay de descanso pendiente.
+  // cualquier overlay pendiente (descanso o pregunta personalizada).
   useEffect(() => {
-    if (formFlow.status !== "answering" && eyeRestPhase !== "idle") {
-      setEyeRestPhase("idle");
-      setEyeRestFollowUp(false);
-      resetRestDwell();
+    if (formFlow.status !== "answering") {
+      if (eyeRestPhase !== "idle") {
+        setEyeRestPhase("idle");
+        setEyeRestFollowUp(false);
+        resetRestDwell();
+      }
+      if (customQuestionPhase !== "idle") {
+        setCustomQuestionPhase("idle");
+        setCustomQuestionText("");
+      }
     }
-  }, [eyeRestPhase, formFlow.status, resetRestDwell]);
+  }, [customQuestionPhase, eyeRestPhase, formFlow.status, resetRestDwell]);
 
   useEffect(() => {
     frameRef.current = frame;
@@ -500,6 +539,14 @@ export default function App() {
         type: q.type,
       })),
       duration_seconds: durationSeconds,
+      ...(auxiliaryAnswers.length > 0
+        ? {
+            auxiliary_answers: auxiliaryAnswers.map((aux) => ({
+              question_title: aux.question,
+              selected_options: [aux.answer],
+            })),
+          }
+        : {}),
     };
 
     try {
@@ -517,7 +564,7 @@ export default function App() {
     } finally {
       setSubmittingForm(false);
     }
-  }, [activeFormUrl, formFlow.answers, formFlow.form, formStartedAt, formSubmissionId]);
+  }, [activeFormUrl, auxiliaryAnswers, formFlow.answers, formFlow.form, formStartedAt, formSubmissionId]);
 
   const handleResetForm = useCallback(() => {
     dispatchFormFlow({ type: "reset" });
@@ -526,6 +573,7 @@ export default function App() {
     setFormSubmissionId(null);
     setImportError(null);
     setSubmitMessage(null);
+    setAuxiliaryAnswers([]);
     setStatusMessage("Formulario reiniciado.");
     resetDwell();
   }, [resetDwell]);
@@ -926,6 +974,20 @@ export default function App() {
         />
       ) : null}
 
+      {customQuestionPhase !== "idle" ? (
+        <CustomQuestionOverlay
+          phase={customQuestionPhase}
+          question={customQuestionText}
+          gazePoint={actionablePoint}
+          dwellMs={dwellMs}
+          snapRadius={snapRadius}
+          neutralZonePercent={neutralZonePercent}
+          onShow={handleShowCustomQuestion}
+          onAnswer={handleAnswerCustomQuestion}
+          onCancel={handleCancelCustomQuestion}
+        />
+      ) : null}
+
       {!immersive ? <AppNavigation onHome={handleResetForm} /> : null}
       <div className="runtime-media-source" aria-hidden="true">
         <video ref={camera.videoRef} autoPlay muted playsInline />
@@ -944,6 +1006,7 @@ export default function App() {
                   trackingReady={ready}
                   onExit={() => dispatchFormFlow({ type: "pauseAnswering" })}
                   onOpenSettings={handleOpenSettingsFromAnswering}
+                  onCustomQuestion={handleOpenCustomQuestion}
                 />
                 <BinaryFormPanel
                   form={formFlow.form}

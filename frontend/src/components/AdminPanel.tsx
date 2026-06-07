@@ -35,9 +35,10 @@ function AnswerDetail({ answers }: { answers: FormAnswerRecord[] }) {
   return (
     <ul className="admin-answer-list">
       {answers.map((a) => (
-        <li key={a.entry_id} className="admin-answer-item">
+        <li key={a.entry_id} className={`admin-answer-item${a.is_auxiliary ? " admin-answer-item--auxiliary" : ""}`}>
           <span className="admin-answer-question">{a.question_title}</span>
           <span className="admin-answer-type">({a.question_type})</span>
+          {a.is_auxiliary ? <span className="admin-answer-aux-badge">auxiliar</span> : null}
           <strong className="admin-answer-value">
             {a.selected_options.length > 0 ? a.selected_options.join(", ") : <em>Sin respuesta</em>}
           </strong>
@@ -68,10 +69,11 @@ function DeliveryStatus({ submission }: { submission: FormSubmissionSummary }) {
 type RowProps = {
   submission: FormSubmissionSummary;
   selected: boolean;
+  includeAuxiliary: boolean;
   onToggle: (id: string) => void;
 };
 
-function SubmissionRow({ submission, selected, onToggle }: RowProps) {
+function SubmissionRow({ submission, selected, includeAuxiliary, onToggle }: RowProps) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<FormSubmissionDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -119,7 +121,7 @@ function SubmissionRow({ submission, selected, onToggle }: RowProps) {
           <button
             type="button"
             className="admin-btn admin-btn--ghost"
-            onClick={() => exportSubmissionsCsv([submission.id])}
+            onClick={() => exportSubmissionsCsv([submission.id], includeAuxiliary)}
             title="Exportar este envio como CSV"
           >
             CSV
@@ -154,6 +156,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterForm, setFilterForm] = useState("");
+  const [includeAuxiliary, setIncludeAuxiliary] = useState(true);
 
   const loadSubmissions = useCallback(async () => {
     setLoading(true);
@@ -238,11 +241,19 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         </select>
 
         <div className="admin-toolbar-actions">
+          <label className="admin-aux-toggle">
+            <input
+              type="checkbox"
+              checked={includeAuxiliary}
+              onChange={(e) => setIncludeAuxiliary(e.target.checked)}
+            />
+            Incluir preguntas auxiliares
+          </label>
           <button
             type="button"
             className="admin-btn admin-btn--primary"
             disabled={selectedIds.length === 0}
-            onClick={() => exportSubmissionsCsv(selectedIds)}
+            onClick={() => exportSubmissionsCsv(selectedIds, includeAuxiliary)}
           >
             Exportar seleccion ({selectedIds.length})
           </button>
@@ -251,8 +262,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             className="admin-btn admin-btn--primary"
             onClick={() =>
               filterForm
-                ? exportSubmissionsCsv(filtered.map((s) => s.id))
-                : exportSubmissionsCsv()
+                ? exportSubmissionsCsv(filtered.map((s) => s.id), includeAuxiliary)
+                : exportSubmissionsCsv(undefined, includeAuxiliary)
             }
           >
             {filterForm ? "Exportar este formulario" : "Exportar todos"}
@@ -297,6 +308,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                   key={s.id}
                   submission={s}
                   selected={selected.has(s.id)}
+                  includeAuxiliary={includeAuxiliary}
                   onToggle={toggleSelect}
                 />
               ))}

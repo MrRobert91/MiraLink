@@ -28,6 +28,11 @@ class FormQuestionMeta(BaseModel):
     type: str
 
 
+class AuxiliaryAnswer(BaseModel):
+    question_title: str
+    selected_options: list[str]
+
+
 class GoogleFormSubmitRequest(BaseModel):
     url: str
     submit_url: str = ""
@@ -38,6 +43,7 @@ class GoogleFormSubmitRequest(BaseModel):
     provider: str = ""
     questions: list[FormQuestionMeta] = []
     duration_seconds: float | None = None
+    auxiliary_answers: list[AuxiliaryAnswer] = []
 
 
 class SaveFormRequest(BaseModel):
@@ -105,6 +111,20 @@ def create_app(
             for entry_id, values in payload.answers.items()
             if values
         ]
+
+        # Preguntas auxiliares personalizadas: se guardan aparte y NUNCA se envían
+        # al proveedor externo (solo se persisten localmente).
+        answer_records.extend(
+            {
+                "entry_id": f"aux:{index}",
+                "question_title": aux.question_title,
+                "question_type": "radio",
+                "selected_options": aux.selected_options,
+                "is_auxiliary": True,
+            }
+            for index, aux in enumerate(payload.auxiliary_answers)
+            if aux.selected_options
+        )
 
         submission_id = responses.record_submission(
             submission_id=payload.submission_id or None,
@@ -178,9 +198,9 @@ def create_app(
         return responses.list_submissions()
 
     @app.get("/api/admin/submissions/export/csv")
-    def export_submissions_csv(ids: str = ""):
+    def export_submissions_csv(ids: str = "", include_auxiliary: bool = True):
         id_list = [i.strip() for i in ids.split(",") if i.strip()] if ids else None
-        csv_content = responses.export_csv(ids=id_list)
+        csv_content = responses.export_csv(ids=id_list, include_auxiliary=include_auxiliary)
         return Response(
             content=csv_content,
             media_type="text/csv; charset=utf-8",

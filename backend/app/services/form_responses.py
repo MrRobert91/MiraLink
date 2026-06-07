@@ -44,7 +44,8 @@ class SqliteFormResponseStore:
                     entry_id TEXT NOT NULL,
                     question_title TEXT NOT NULL,
                     question_type TEXT NOT NULL,
-                    selected_options TEXT NOT NULL
+                    selected_options TEXT NOT NULL,
+                    is_auxiliary INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_form_answers_submission
                     ON form_answers(submission_id);
@@ -78,6 +79,15 @@ class SqliteFormResponseStore:
                     connection.execute(
                         f"ALTER TABLE form_submissions ADD COLUMN {column} {definition}"
                     )
+
+            answer_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(form_answers)").fetchall()
+            }
+            if "is_auxiliary" not in answer_columns:
+                connection.execute(
+                    "ALTER TABLE form_answers ADD COLUMN is_auxiliary INTEGER NOT NULL DEFAULT 0"
+                )
 
     def record_submission(
         self,
@@ -121,8 +131,8 @@ class SqliteFormResponseStore:
             for answer in answers:
                 connection.execute(
                     """
-                    INSERT INTO form_answers (submission_id, entry_id, question_title, question_type, selected_options)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO form_answers (submission_id, entry_id, question_title, question_type, selected_options, is_auxiliary)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         submission_id,
@@ -130,6 +140,7 @@ class SqliteFormResponseStore:
                         answer["question_title"],
                         answer["question_type"],
                         json.dumps(answer["selected_options"], ensure_ascii=False),
+                        int(answer.get("is_auxiliary", 0)),
                     ),
                 )
         return submission_id
@@ -187,7 +198,7 @@ class SqliteFormResponseStore:
                 return None
             answer_rows = connection.execute(
                 """
-                SELECT entry_id, question_title, question_type, selected_options
+                SELECT entry_id, question_title, question_type, selected_options, is_auxiliary
                 FROM form_answers
                 WHERE submission_id = ?
                 ORDER BY id
@@ -200,12 +211,13 @@ class SqliteFormResponseStore:
                 "question_title": row["question_title"],
                 "question_type": row["question_type"],
                 "selected_options": json.loads(row["selected_options"]),
+                "is_auxiliary": bool(row["is_auxiliary"]),
             }
             for row in answer_rows
         ]
         return {**dict(sub), "answers": answers}
 
-    def export_csv(self, ids: list[str] | None = None) -> str:
+    def export_csv(self, ids: list[str] | None = None, include_auxiliary: bool = True) -> str:
         with self._connect() as connection:
             if ids:
                 placeholders = ",".join("?" * len(ids))
@@ -225,7 +237,7 @@ class SqliteFormResponseStore:
             placeholders = ",".join("?" * len(sub_ids))
             answer_rows = connection.execute(
                 f"""
-                SELECT submission_id, entry_id, question_title, question_type, selected_options
+                SELECT submission_id, entry_id, question_title, question_type, selected_options, is_auxiliary
                 FROM form_answers
                 WHERE submission_id IN ({placeholders})
                 ORDER BY submission_id, id
@@ -242,17 +254,26 @@ class SqliteFormResponseStore:
                     "question_title": row["question_title"],
                     "question_type": row["question_type"],
                     "selected_options": json.loads(row["selected_options"]),
+                    "is_auxiliary": bool(row["is_auxiliary"]),
                 }
             )
 
-        all_questions: list[str] = []
-        seen_questions: set[str] = set()
+        # Las preguntas del formulario y las auxiliares ocupan columnas separadas.
+        # Las auxiliares se prefijan para distinguirlas y solo se incluyen si se pide.
+        standard_questions: list[str] = []
+        seen_standard: set[str] = set()
+        auxiliary_questions: list[str] = []
+        seen_auxiliary: set[str] = set()
         for sid in sub_ids:
             for ans in answers_by_sub.get(sid, []):
                 key = ans["question_title"]
-                if key not in seen_questions:
-                    seen_questions.add(key)
-                    all_questions.append(key)
+                if ans["is_auxiliary"]:
+                    if key not in seen_auxiliary:
+                        seen_auxiliary.add(key)
+                        auxiliary_questions.append(key)
+                elif key not in seen_standard:
+                    seen_standard.add(key)
+                    standard_questions.append(key)
 
         fixed_columns = [
             "id",
@@ -266,7 +287,8 @@ class SqliteFormResponseStore:
             "external_message",
             "external_attempted_at",
         ]
-        header = fixed_columns + all_questions
+        aux_columns = auxiliary_questions if include_auxiliary else []
+        header = fixed_columns + standard_questions + [f"Auxiliar: {q}" for q in aux_columns]
 
         output = io.StringIO()
         writer = csv.writer(output)
@@ -285,9 +307,20 @@ class SqliteFormResponseStore:
                 sub["external_message"] or "",
                 sub["external_attempted_at"] or "",
             ]
-            answers_map = {ans["question_title"]: ", ".join(ans["selected_options"]) for ans in answers_by_sub.get(sub["id"], [])}
-            for q in all_questions:
-                row_data.append(answers_map.get(q, ""))
+            standard_map = {
+                ans["question_title"]: ", ".join(ans["selected_options"])
+                for ans in answers_by_sub.get(sub["id"], [])
+                if not ans["is_auxiliary"]
+            }
+            auxiliary_map = {
+                ans["question_title"]: ", ".join(ans["selected_options"])
+                for ans in answers_by_sub.get(sub["id"], [])
+                if ans["is_auxiliary"]
+            }
+            for q in standard_questions:
+                row_data.append(standard_map.get(q, ""))
+            for q in aux_columns:
+                row_data.append(auxiliary_map.get(q, ""))
             writer.writerow(row_data)
 
         return output.getvalue()

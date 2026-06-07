@@ -67,6 +67,11 @@ export type FormQuestionMetaPayload = {
   type: string;
 };
 
+export type AuxiliaryAnswerPayload = {
+  question_title: string;
+  selected_options: string[];
+};
+
 export type SubmitFormPayload = {
   submission_id?: string;
   url: string;
@@ -77,6 +82,7 @@ export type SubmitFormPayload = {
   provider: string;
   questions: FormQuestionMetaPayload[];
   duration_seconds: number | null;
+  auxiliary_answers?: AuxiliaryAnswerPayload[];
 };
 
 export async function submitGoogleForm(payload: SubmitFormPayload): Promise<GoogleFormSubmitResponse> {
@@ -98,8 +104,15 @@ export async function getSubmission(id: string): Promise<FormSubmissionDetail> {
   return parseJson<FormSubmissionDetail>(response);
 }
 
-export function exportSubmissionsCsv(ids?: string[]): void {
-  const query = ids && ids.length > 0 ? `?ids=${ids.join(",")}` : "";
+export function exportSubmissionsCsv(ids?: string[], includeAuxiliary = true): void {
+  const params = new URLSearchParams();
+  if (ids && ids.length > 0) {
+    params.set("ids", ids.join(","));
+  }
+  if (!includeAuxiliary) {
+    params.set("include_auxiliary", "false");
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
   const url = buildApiUrl(resolveApiBaseUrl(), `/api/admin/submissions/export/csv${query}`);
   const anchor = document.createElement("a");
   anchor.href = url;

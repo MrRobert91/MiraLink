@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CSSProperties } from "react";
 
-import { buildDecisionGridColumns, resolveBinaryDecisionTarget } from "../lib/decisionZone";
+import { DecisionZones } from "./DecisionZones";
+import { resolveBinaryDecisionTarget } from "../lib/decisionZone";
 import { useDwellSelection } from "../hooks/useDwellSelection";
 import type { FocusableTarget } from "../lib/selection";
 import type { GazePoint } from "../types";
@@ -103,48 +103,30 @@ export function EyeRestOverlay({
     );
   }
 
-  const noFocused = focusedKeyId === "decision-no";
-  const yesFocused = focusedKeyId === "decision-yes";
-  const [leftWidth, centerWidth, rightWidth] = buildDecisionGridColumns(neutralZonePercent);
-  const gridStyle: CSSProperties = { gridTemplateColumns: `${leftWidth} ${centerWidth} ${rightWidth}` };
-
   return (
     <div className="eye-rest-overlay eye-rest-overlay--prompt" role="dialog" aria-modal="true" aria-label="Pausa de descanso">
       <div className="eye-rest-prompt">
-        <header className="eye-rest-prompt__header">
-          <p className="eyebrow">Descanso de la vista</p>
-          <h2>{followUp ? "¿Quieres otra pausa de 1 minuto?" : "¿Quieres hacer una pausa de 1 minuto?"}</h2>
-          <p>Tus respuestas se conservan. Mira a un lado para elegir.</p>
-        </header>
-
-        <div className="binary-decision-grid" style={gridStyle}>
-          <button
-            ref={registerTarget("decision-no")}
-            type="button"
-            className={`decision-zone decision-zone--no${noFocused ? " decision-zone--focused" : ""}`}
-            onClick={onDecline}
-          >
-            <span>No</span>
-            <small>Seguir respondiendo</small>
-            {noFocused ? <span className="decision-zone__progress" style={{ transform: `scaleX(${dwellProgress})` }} /> : null}
-          </button>
-
-          <div className="decision-rest-zone decision-rest-zone--prompt" aria-hidden="true">
-            <strong>Pausa</strong>
-            <span>Mira al lado para decidir.</span>
-          </div>
-
-          <button
-            ref={registerTarget("decision-yes")}
-            type="button"
-            className={`decision-zone decision-zone--yes${yesFocused ? " decision-zone--focused" : ""}`}
-            onClick={onAccept}
-          >
-            <span>Sí</span>
-            <small>Descansar un minuto</small>
-            {yesFocused ? <span className="decision-zone__progress" style={{ transform: `scaleX(${dwellProgress})` }} /> : null}
-          </button>
-        </div>
+        <DecisionZones
+          header={
+            <header className="eye-rest-prompt__header">
+              <p className="eyebrow">Descanso de la vista</p>
+              <h2>{followUp ? "¿Quieres otra pausa de 1 minuto?" : "¿Quieres hacer una pausa de 1 minuto?"}</h2>
+              <p>Tus respuestas se conservan. Mira a un lado para elegir.</p>
+            </header>
+          }
+          restTitle="Pausa"
+          restHint="Mira al lado para decidir."
+          yesLabel="Sí"
+          yesHint="Descansar un minuto"
+          noLabel="No"
+          noHint="Seguir respondiendo"
+          focusedTargetId={focusedKeyId}
+          dwellProgress={dwellProgress}
+          neutralZonePercent={neutralZonePercent}
+          registerTarget={registerTarget}
+          onAnswerYes={onAccept}
+          onAnswerNo={onDecline}
+        />
       </div>
     </div>
   );

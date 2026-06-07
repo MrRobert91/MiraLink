@@ -1882,25 +1882,19 @@ input[type="range"] {
   }
 }
 
-/* Anillo de progreso del descanso de la vista sobre la zona neutra. */
+/* Barra de progreso del descanso de la vista, bajo la zona neutra, coherente
+   con los dwell de Sí/No. */
 .decision-rest-zone {
   position: relative;
+  overflow: hidden;
 }
 
-.decision-rest-zone__rest-ring {
+.decision-rest-zone__progress {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: clamp(84px, 10vw, 148px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: conic-gradient(
-    var(--accent) calc(var(--rest-progress, 0) * 360deg),
-    var(--surface) 0
-  );
-  -webkit-mask: radial-gradient(circle, transparent 54%, #000 56%);
-  mask: radial-gradient(circle, transparent 54%, #000 56%);
+  inset: auto 0 0 0;
+  height: 14px;
+  transform-origin: left center;
+  background: var(--accent);
   pointer-events: none;
 }
 
@@ -1950,10 +1944,6 @@ input[type="range"] {
   font-size: clamp(1rem, 1.6vw, 1.3rem);
 }
 
-.eye-rest-prompt .decision-rest-zone--prompt {
-  border-style: solid;
-}
-
 .eye-rest-resting {
   display: grid;
   gap: clamp(10px, 2vh, 20px);
@@ -1985,6 +1975,82 @@ input[type="range"] {
   max-width: 32ch;
   color: var(--muted);
   font-size: clamp(1rem, 1.6vw, 1.25rem);
+}
+
+/* Pregunta personalizada: tarjeta de redacción (facilitador) y botón de cancelar. */
+.custom-question-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.custom-question-compose {
+  width: min(640px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 4vw, 40px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.custom-question-compose__header h2 {
+  margin: 6px 0 8px;
+  color: var(--text);
+}
+
+.custom-question-compose__header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.custom-question-compose__input {
+  width: 100%;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 2px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.custom-question-compose__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.custom-question-cancel {
+  justify-self: center;
+  margin-top: 14px;
+}
+
+/* Admin: conmutador de auxiliares y etiqueta de respuesta auxiliar. */
+.admin-aux-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-answer-aux-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 @media (prefers-reduced-motion: reduce) {
