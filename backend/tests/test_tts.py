@@ -2,9 +2,12 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 from app.main import create_app
-from app.services.tts import TtsCache, TtsService, Voice
+from app.services.tts import TtsCache, TtsError, TtsService, Voice
 from app.services.tts.cache import text_hash
+from app.services.tts.piper import PiperEngine, PiperVoiceConfig
 from app.services.tts.registry import TtsRegistry, parse_voice_id
 
 
@@ -111,6 +114,24 @@ def test_tts_endpoints_prepare_and_serve_audio(tmp_path):
     assert audio.status_code == 200
     assert audio.headers["content-type"] == "audio/wav"
     assert audio.content == b"AUDIO::v1::\xc2\xbfTienes dolor?"
+
+
+def test_piper_lists_only_voices_with_model_present(tmp_path):
+    voices = [PiperVoiceConfig("es_ES-davefx-medium", "ES", "es-ES", "es_ES-davefx-medium.onnx")]
+    engine = PiperEngine(models_dir=tmp_path, voices=voices)
+    assert engine.list_voices() == []  # sin modelo en disco, no se anuncia
+
+    (tmp_path / "es_ES-davefx-medium.onnx").write_bytes(b"fake-model")
+    assert [v.id for v in engine.list_voices()] == ["es_ES-davefx-medium"]
+
+
+def test_piper_raises_when_binary_is_missing(tmp_path):
+    (tmp_path / "es_ES-davefx-medium.onnx").write_bytes(b"fake-model")
+    voices = [PiperVoiceConfig("es_ES-davefx-medium", "ES", "es-ES", "es_ES-davefx-medium.onnx")]
+    engine = PiperEngine(models_dir=tmp_path, voices=voices, binary_path="piper-binario-inexistente")
+
+    with pytest.raises(TtsError, match="binario de Piper"):
+        engine.synthesize("Hola", "es_ES-davefx-medium")
 
 
 def test_audio_endpoint_returns_404_for_unknown_hash(tmp_path):

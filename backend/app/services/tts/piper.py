@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import io
-import wave
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -31,10 +32,12 @@ DEFAULT_PIPER_VOICES: list[PiperVoiceConfig] = [
 
 
 class PiperEngine:
-    """Motor TTS basado en Piper, ejecutado dentro del propio backend.
+    """Motor TTS basado en el binario precompilado de Piper.
 
-    Solo anuncia las voces cuyo modelo `.onnx` existe en `models_dir`, de modo
-    que la imagen sin modelos degrada de forma elegante (catálogo vacío).
+    Usa el ejecutable de Piper (sin dependencias de Python) invocado por
+    subprocess: `PIPER_BIN --model <modelo> --output_file <wav>` con el texto por
+    stdin. Solo anuncia las voces cuyo modelo `.onnx` existe en `models_dir`, de
+    modo que la imagen sin modelos degrada de forma elegante (catálogo vacío).
     """
 
     name = "piper"
@@ -43,13 +46,14 @@ class PiperEngine:
         self,
         models_dir: Path | str,
         voices: list[PiperVoiceConfig] | None = None,
+        binary_path: str | None = None,
         synth: Callable[[Path, str], bytes] | None = None,
     ) -> None:
         self._models_dir = Path(models_dir)
         self._voices = {v.id: v for v in (voices if voices is not None else DEFAULT_PIPER_VOICES)}
-        # `synth` se inyecta en tests; en producción usa Piper de verdad.
+        self._binary_path = binary_path or os.getenv("PIPER_BIN", "piper")
+        # `synth` se inyecta en tests; en producción usa el binario de Piper.
         self._synth = synth or self._synthesize_with_piper
-        self._loaded: dict[str, object] = {}
 
     def _model_path(self, voice_id: str) -> Path:
         return self._models_dir / self._voices[voice_id].model_filename
@@ -70,20 +74,22 @@ class PiperEngine:
         return self._synth(model_path, text)
 
     def _synthesize_with_piper(self, model_path: Path, text: str) -> bytes:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+            output_path = Path(handle.name)
         try:
-            from piper import PiperVoice  # type: ignore import-not-found
-        except ImportError as exc:  # pragma: no cover - depende del entorno
-            raise TtsError(
-                "El paquete 'piper-tts' no está instalado en el backend."
-            ) from exc
-
-        key = str(model_path)
-        voice = self._loaded.get(key)
-        if voice is None:
-            voice = PiperVoice.load(str(model_path))
-            self._loaded[key] = voice
-
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wav_file:
-            voice.synthesize(text, wav_file)
-        return buffer.getvalue()
+            try:
+                result = subprocess.run(
+                    [self._binary_path, "--model", str(model_path), "--output_file", str(output_path)],
+                    input=text.encode("utf-8"),
+                    capture_output=True,
+                )
+            except FileNotFoundError as exc:  # pragma: no cover - depende del entorno
+                raise TtsError(
+                    f"No se encontró el binario de Piper ('{self._binary_path}')."
+                ) from exc
+            if result.returncode != 0:
+                detail = result.stderr.decode("utf-8", "ignore").strip()[:300]
+                raise TtsError(f"Piper falló (código {result.returncode}): {detail}")
+            return output_path.read_bytes()
+        finally:
+            output_path.unlink(missing_ok=True)
