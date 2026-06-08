@@ -3,6 +3,7 @@ type AnsweringToolbarProps = {
   totalSteps: number;
   trackingReady: boolean;
   onExit: () => void;
+  onPause: () => void;
   onOpenSettings: () => void;
   onCustomQuestion: () => void;
 };
@@ -12,6 +13,7 @@ export function AnsweringToolbar({
   totalSteps,
   trackingReady,
   onExit,
+  onPause,
   onOpenSettings,
   onCustomQuestion,
 }: AnsweringToolbarProps) {
@@ -29,6 +31,9 @@ export function AnsweringToolbar({
         {!trackingReady ? (
           <span className="tracking-status">Inicializando mirada</span>
         ) : null}
+        <button type="button" className="secondary-button answering-pause-button" onClick={onPause}>
+          Pausa
+        </button>
         <button
           type="button"
           className="secondary-button answering-custom-question-button"

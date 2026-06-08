@@ -35,6 +35,7 @@ class ProfilePreferences(BaseModel):
     custom_question_voice_id: str = ""
     tts_read_question_once: bool = False
     question_intro_enabled: bool = False
+    question_intro_seconds: int = 6
 
 
 class UserProfile(BaseModel):
@@ -86,7 +87,8 @@ class SqliteProfileStore:
                     reading_lock_seconds INTEGER NOT NULL DEFAULT 4,
                     custom_question_voice_id TEXT NOT NULL DEFAULT '',
                     tts_read_question_once INTEGER NOT NULL DEFAULT 0,
-                    question_intro_enabled INTEGER NOT NULL DEFAULT 0
+                    question_intro_enabled INTEGER NOT NULL DEFAULT 0,
+                    question_intro_seconds INTEGER NOT NULL DEFAULT 6
                 );
                 """
             )
@@ -120,6 +122,7 @@ class SqliteProfileStore:
                 "custom_question_voice_id": "TEXT NOT NULL DEFAULT ''",
                 "tts_read_question_once": "INTEGER NOT NULL DEFAULT 0",
                 "question_intro_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "question_intro_seconds": "INTEGER NOT NULL DEFAULT 6",
             }
             for column_name, definition in migration_columns.items():
                 if column_name not in existing_columns:
@@ -151,9 +154,9 @@ class SqliteProfileStore:
                     tts_enabled, tts_voice_id, tts_rate,
                     answer_labels, selection_sound_enabled, selection_sound_yes,
                     selection_sound_no, reading_lock_seconds, custom_question_voice_id,
-                    tts_read_question_once, question_intro_enabled
+                    tts_read_question_once, question_intro_enabled, question_intro_seconds
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -182,7 +185,8 @@ class SqliteProfileStore:
                     reading_lock_seconds=excluded.reading_lock_seconds,
                     custom_question_voice_id=excluded.custom_question_voice_id,
                     tts_read_question_once=excluded.tts_read_question_once,
-                    question_intro_enabled=excluded.question_intro_enabled
+                    question_intro_enabled=excluded.question_intro_enabled,
+                    question_intro_seconds=excluded.question_intro_seconds
                 """,
                 (
                     user_id,
@@ -214,6 +218,7 @@ class SqliteProfileStore:
                     preferences.custom_question_voice_id,
                     int(preferences.tts_read_question_once),
                     int(preferences.question_intro_enabled),
+                    preferences.question_intro_seconds,
                 ),
             )
         return self.get_profile(user_id)
@@ -231,7 +236,7 @@ class SqliteProfileStore:
                        tts_enabled, tts_voice_id, tts_rate,
                        answer_labels, selection_sound_enabled, selection_sound_yes,
                        selection_sound_no, reading_lock_seconds, custom_question_voice_id,
-                       tts_read_question_once, question_intro_enabled
+                       tts_read_question_once, question_intro_enabled, question_intro_seconds
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -269,5 +274,6 @@ class SqliteProfileStore:
                 custom_question_voice_id=preference_row["custom_question_voice_id"],
                 tts_read_question_once=bool(preference_row["tts_read_question_once"]),
                 question_intro_enabled=bool(preference_row["question_intro_enabled"]),
+                question_intro_seconds=preference_row["question_intro_seconds"],
             ),
         )

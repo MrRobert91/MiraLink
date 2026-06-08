@@ -11,6 +11,8 @@ import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { EyeRestOverlay, eyeRestPromptText } from "./components/EyeRestOverlay";
 import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
 import { QuestionIntroOverlay, questionIntroSpeechText } from "./components/QuestionIntroOverlay";
+import { PauseOverlay } from "./components/PauseOverlay";
+import { CalibrationCountdown } from "./components/CalibrationCountdown";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
 import { SettingsPage } from "./components/SettingsPage";
@@ -133,10 +135,15 @@ export default function App() {
   const [customQuestionVoiceId, setCustomQuestionVoiceId] = useState("");
   const [ttsReadQuestionOnce, setTtsReadQuestionOnce] = useState(false);
   const [questionIntroEnabled, setQuestionIntroEnabled] = useState(false);
+  const [questionIntroSeconds, setQuestionIntroSeconds] = useState(6);
   // Pantalla explicativa que se intercala antes de cada pregunta.
   const [questionIntroPhase, setQuestionIntroPhase] = useState<"idle" | "showing">("idle");
   // Preguntas (por id) ya presentadas, para no repetir la pantalla al retroceder.
   const introducedQuestionsRef = useRef<Set<string>>(new Set());
+  // Pausa manual (solo ratón): congela mirada y locución hasta reanudar.
+  const [paused, setPaused] = useState(false);
+  // Cuenta atrás visual (3,2,1) antes de iniciar los puntos de calibración.
+  const [calibrationCountdown, setCalibrationCountdown] = useState<number | null>(null);
   // Bloqueo de lectura: dwell suspendido al salir cada pregunta (modo sin voz).
   const [readingLockActive, setReadingLockActive] = useState(false);
   const [customReadingLock, setCustomReadingLock] = useState(false);
@@ -385,7 +392,7 @@ export default function App() {
   const overlaysIdle =
     eyeRestPhase === "idle" && customQuestionPhase === "idle" && questionIntroPhase === "idle";
   const formGazePoint =
-    overlaysIdle && !isSpeaking && !readingLockActive ? actionablePoint : null;
+    overlaysIdle && !paused && !isSpeaking && !readingLockActive ? actionablePoint : null;
 
   const { focusedKeyId, dwellProgress, registerTarget, resetDwell } = useDwellSelection({
     gazePoint: formGazePoint,
@@ -416,7 +423,7 @@ export default function App() {
   );
 
   const restGazePoint =
-    eyeRestEnabled && overlaysIdle && !isSpeaking && !readingLockActive
+    eyeRestEnabled && overlaysIdle && !paused && !isSpeaking && !readingLockActive
       ? actionablePoint
       : null;
 
@@ -476,12 +483,12 @@ export default function App() {
   // así preparar su audio (que cambia `ttsAudioUrls` y, con él, `speakText`) no
   // re-dispara este efecto y pisa la locución del overlay con la del formulario.
   useEffect(() => {
-    if (!ttsEnabled || formFlow.status !== "answering" || !activeStep || !overlaysIdle) {
+    if (!ttsEnabled || formFlow.status !== "answering" || !activeStep || !overlaysIdle || paused) {
       cancelSpeech();
       return;
     }
     speakText(stepSpeechText(activeStep));
-  }, [ttsEnabled, formFlow.status, activeStep, overlaysIdle, ttsReadQuestionOnce, speakText, cancelSpeech]);
+  }, [ttsEnabled, formFlow.status, activeStep, overlaysIdle, paused, ttsReadQuestionOnce, speakText, cancelSpeech]);
 
   // Pantalla explicativa: al entrar en una pregunta aún no presentada se intercala
   // una pantalla que muestra/lee su tipo y opciones. Mientras se muestra,
@@ -525,11 +532,32 @@ export default function App() {
     questionIntroCompleteRef.current = handleQuestionIntroComplete;
   }, [handleQuestionIntroComplete]);
 
+  // Pausa manual (solo ratón): detiene la locución y congela la mirada.
+  const handlePause = useCallback(() => {
+    setPaused(true);
+    cancelSpeech();
+    cancelCustomSpeech();
+    cancelIntroSpeech();
+    resetDwell();
+  }, [cancelSpeech, cancelCustomSpeech, cancelIntroSpeech, resetDwell]);
+
+  const handleResume = useCallback(() => {
+    setPaused(false);
+    resetDwell();
+  }, [resetDwell]);
+
   // Locución de la pantalla explicativa (con voz). Para voces de backend genera el
   // audio al vuelo antes de leerlo. Sin voz no se lee: el overlay se cierra con su
   // propio temporizador.
   useEffect(() => {
-    if (questionIntroPhase !== "showing" || !ttsEnabled || !activeQuestion) {
+    if (
+      questionIntroPhase !== "showing" ||
+      !ttsEnabled ||
+      !activeQuestion ||
+      paused ||
+      eyeRestPhase !== "idle" ||
+      customQuestionPhase !== "idle"
+    ) {
       return;
     }
     let cancelled = false;
@@ -549,6 +577,9 @@ export default function App() {
     ttsEnabled,
     activeQuestion,
     activeStep?.questionIndex,
+    paused,
+    eyeRestPhase,
+    customQuestionPhase,
     ttsVoiceId,
     prepareAudioUrl,
     speakIntro,
@@ -644,8 +675,11 @@ export default function App() {
   // Preguntas auxiliares personalizadas: el facilitador redacta una pregunta que
   // se superpone al usuario, que responde Sí/No con la mirada. Se guardan aparte.
   const handleOpenCustomQuestion = useCallback(() => {
+    // Si se abre desde la pantalla explicativa, ciérrala antes para no solapar.
+    cancelIntroSpeech();
+    setQuestionIntroPhase("idle");
     setCustomQuestionPhase("compose");
-  }, []);
+  }, [cancelIntroSpeech]);
 
   const handleShowCustomQuestion = useCallback(
     async (text: string) => {
@@ -716,8 +750,11 @@ export default function App() {
         cancelIntroSpeech();
         setQuestionIntroPhase("idle");
       }
+      if (paused) {
+        setPaused(false);
+      }
     }
-  }, [customQuestionPhase, eyeRestPhase, questionIntroPhase, formFlow.status, resetRestDwell, cancelIntroSpeech]);
+  }, [customQuestionPhase, eyeRestPhase, questionIntroPhase, paused, formFlow.status, resetRestDwell, cancelIntroSpeech]);
 
   useEffect(() => {
     frameRef.current = frame;
@@ -938,8 +975,7 @@ export default function App() {
     resetDwell();
   }, [resetDwell]);
 
-  const handleBeginCalibration = useCallback(() => {
-    setCalibrationInstructionsOpen(false);
+  const startCalibrationPoints = useCallback(() => {
     setCalibrationActive(true);
     setCalibrationIndex(0);
     setCalibrationSamples([]);
@@ -957,6 +993,32 @@ export default function App() {
     );
     resetDwell();
   }, [appendCalibrationLog, resetDwell]);
+
+  // "Comenzar" lanza una cuenta atrás visual (3,2,1) antes de los puntos, para
+  // dar tiempo a fijar la mirada al frente.
+  const handleBeginCalibration = useCallback(() => {
+    setCalibrationInstructionsOpen(false);
+    setCalibrationActive(false);
+    setCalibrationCountdown(3);
+    setStatusMessage("Preparándose para calibrar...");
+    resetDwell();
+  }, [resetDwell]);
+
+  // Decremento de la cuenta atrás; al llegar a 0 arranca la calibración real.
+  useEffect(() => {
+    if (calibrationCountdown === null) {
+      return;
+    }
+    if (calibrationCountdown <= 0) {
+      setCalibrationCountdown(null);
+      startCalibrationPoints();
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setCalibrationCountdown((value) => (value === null ? null : value - 1));
+    }, 1000);
+    return () => window.clearTimeout(timeout);
+  }, [calibrationCountdown, startCalibrationPoints]);
 
   useEffect(() => {
     if (!calibrationActive) {
@@ -1131,6 +1193,7 @@ export default function App() {
         setCustomQuestionVoiceId(preferences.custom_question_voice_id);
         setTtsReadQuestionOnce(preferences.tts_read_question_once);
         setQuestionIntroEnabled(preferences.question_intro_enabled);
+        setQuestionIntroSeconds(preferences.question_intro_seconds);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -1176,6 +1239,7 @@ export default function App() {
       custom_question_voice_id: customQuestionVoiceId,
       tts_read_question_once: ttsReadQuestionOnce,
       question_intro_enabled: questionIntroEnabled,
+      question_intro_seconds: questionIntroSeconds,
     }),
     [
       dwellMs,
@@ -1204,6 +1268,7 @@ export default function App() {
       customQuestionVoiceId,
       ttsReadQuestionOnce,
       questionIntroEnabled,
+      questionIntroSeconds,
     ],
   );
 
@@ -1240,6 +1305,7 @@ export default function App() {
       setCustomQuestionVoiceId(saved.custom_question_voice_id);
       setTtsReadQuestionOnce(saved.tts_read_question_once);
       setQuestionIntroEnabled(saved.question_intro_enabled);
+      setQuestionIntroSeconds(saved.question_intro_seconds);
       setPreferencesSaved(true);
       return true;
     } catch {
@@ -1253,7 +1319,11 @@ export default function App() {
   const answeredCount = Object.values(formFlow.answers).reduce((total, values) => total + values.length, 0);
   const compatibleQuestionCount = formFlow.form?.questions.length ?? 0;
   const binaryStepCount = formFlow.steps.length;
-  const immersive = calibrationActive || calibrationInstructionsOpen || formFlow.status === "answering";
+  const immersive =
+    calibrationActive ||
+    calibrationInstructionsOpen ||
+    calibrationCountdown !== null ||
+    formFlow.status === "answering";
   const returnToAnswering =
     location.pathname === "/configuracion" &&
     Boolean((location.state as { returnToForm?: boolean } | null)?.returnToForm);
@@ -1273,6 +1343,7 @@ export default function App() {
   const handleCancelCalibration = () => {
     setCalibrationActive(false);
     setCalibrationInstructionsOpen(false);
+    setCalibrationCountdown(null);
     setCalibrationProgress(0);
     dispatchFormFlow({ type: "skipCalibration" });
     setStatusMessage("Calibración cancelada. Puedes continuar sin calibrar o volver a intentarlo.");
@@ -1324,6 +1395,21 @@ export default function App() {
     </div>
   );
 
+  // Barra de navegación durante la respuesta. Se reutiliza también sobre la
+  // pantalla explicativa para que las acciones (pausa, pregunta personalizada,
+  // configuración) estén disponibles igual que al responder.
+  const answeringToolbar = (
+    <AnsweringToolbar
+      currentStep={Math.min(formFlow.currentStepIndex + 1, binaryStepCount)}
+      totalSteps={binaryStepCount}
+      trackingReady={ready}
+      onExit={() => dispatchFormFlow({ type: "pauseAnswering" })}
+      onPause={handlePause}
+      onOpenSettings={handleOpenSettingsFromAnswering}
+      onCustomQuestion={handleOpenCustomQuestion}
+    />
+  );
+
   return (
     <div
       className={`app-shell${immersive ? " app-shell--immersive" : ""}`}
@@ -1352,6 +1438,21 @@ export default function App() {
             ) : null
           }
           onCancel={handleCancelCalibration}
+        />
+      ) : null}
+
+      {calibrationCountdown !== null ? (
+        <CalibrationCountdown
+          value={calibrationCountdown}
+          cameraBackdrop={
+            cameraVisible && providerMode === "mediapipe" ? (
+              <CalibrationCameraBackdrop
+                stream={camera.stream}
+                sourceCanvasRef={overlayRef}
+                opacity={cameraOpacity}
+              />
+            ) : null
+          }
         />
       ) : null}
 
@@ -1394,16 +1495,17 @@ export default function App() {
           question={activeQuestion}
           questionIndex={activeStep.questionIndex}
           totalQuestions={activeStep.totalQuestions}
-          // Sin voz se cierra tras un tiempo proporcional al nº de opciones. Con
-          // voz, el cierre normal lo dispara el fin de la locución (onEnd); el
-          // temporizador actúa solo como red de seguridad (+15s) por si la voz
-          // falla y onEnd no llega, para que la pantalla no se quede bloqueada.
-          durationMs={
-            2500 + activeQuestion.options.length * 1800 + (ttsEnabled ? 15000 : 0)
-          }
+          // Sin voz se cierra tras los segundos configurados. Con voz, el cierre
+          // normal lo dispara el fin de la locución (onEnd); el temporizador actúa
+          // solo como red de seguridad (+15s) por si la voz falla y onEnd no llega,
+          // para que la pantalla no se quede bloqueada.
+          durationMs={questionIntroSeconds * 1000 + (ttsEnabled ? 15000 : 0)}
+          toolbar={answeringToolbar}
           onComplete={handleQuestionIntroComplete}
         />
       ) : null}
+
+      {paused ? <PauseOverlay onResume={handleResume} /> : null}
 
       {!immersive ? <AppNavigation onHome={handleResetForm} /> : null}
       <div className="runtime-media-source" aria-hidden="true">
@@ -1417,14 +1519,7 @@ export default function App() {
           element={
             formFlow.status === "answering" ? (
               <main className="answering-screen">
-                <AnsweringToolbar
-                  currentStep={Math.min(formFlow.currentStepIndex + 1, binaryStepCount)}
-                  totalSteps={binaryStepCount}
-                  trackingReady={ready}
-                  onExit={() => dispatchFormFlow({ type: "pauseAnswering" })}
-                  onOpenSettings={handleOpenSettingsFromAnswering}
-                  onCustomQuestion={handleOpenCustomQuestion}
-                />
+                {answeringToolbar}
                 <BinaryFormPanel
                   form={formFlow.form}
                   step={activeStep}
@@ -1582,7 +1677,12 @@ export default function App() {
         <Route path="*" element={<main className="page-container">Página no encontrada.</main>} />
       </Routes>
 
-      {displayPoint && immersive && eyeRestPhase !== "resting" ? (
+      {displayPoint &&
+      immersive &&
+      eyeRestPhase !== "resting" &&
+      questionIntroPhase !== "showing" &&
+      calibrationCountdown === null &&
+      !paused ? (
         <div className="gaze-cursor" style={{ left: `${displayPoint.x}px`, top: `${displayPoint.y}px` }}>
           <span className="gaze-cursor__ring" />
           <span className="gaze-cursor__dot" />

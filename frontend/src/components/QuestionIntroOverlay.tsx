@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import type { FormQuestion } from "../types";
 
@@ -12,6 +12,8 @@ type QuestionIntroOverlayProps = {
    * temporizador.
    */
   durationMs: number;
+  /** Barra de navegación que se muestra encima, igual que al responder. */
+  toolbar?: ReactNode;
   onComplete: () => void;
 };
 
@@ -37,6 +39,7 @@ export function QuestionIntroOverlay({
   questionIndex,
   totalQuestions,
   durationMs,
+  toolbar,
   onComplete,
 }: QuestionIntroOverlayProps) {
   useEffect(() => {
@@ -54,6 +57,7 @@ export function QuestionIntroOverlay({
       aria-modal="true"
       aria-label="Presentación de la pregunta"
     >
+      {toolbar ? <div className="question-intro__toolbar">{toolbar}</div> : null}
       <div className="question-intro">
         <p className="eyebrow">
           Pregunta {questionIndex + 1} de {totalQuestions}
@@ -69,6 +73,9 @@ export function QuestionIntroOverlay({
         <p className="question-intro__hint">
           Prepárate. En un momento podrás responder con la mirada.
         </p>
+        <button type="button" className="primary-button question-intro__start" onClick={onComplete}>
+          Empezar a responder
+        </button>
       </div>
     </div>
   );

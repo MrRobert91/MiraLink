@@ -259,6 +259,8 @@ export type MiraLinkPreferences = {
   tts_read_question_once: boolean;
   /** Muestra una pantalla explicativa (tipo + opciones) antes de cada pregunta. */
   question_intro_enabled: boolean;
+  /** Segundos que dura la pantalla explicativa cuando la voz está desactivada. */
+  question_intro_seconds: number;
   /** Etiquetas visuales de las respuestas binarias. */
   answer_labels: AnswerLabelMode;
   selection_sound_enabled: boolean;
@@ -297,6 +299,7 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   tts_rate: 1,
   tts_read_question_once: false,
   question_intro_enabled: false,
+  question_intro_seconds: 6,
   answer_labels: "si_no",
   selection_sound_enabled: false,
   selection_sound_yes: "",

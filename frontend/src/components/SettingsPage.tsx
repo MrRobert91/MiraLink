@@ -55,6 +55,8 @@ const TOOLTIPS = {
     "Lee el enunciado de la pregunta solo en su primera opción; en las siguientes opciones lee únicamente la opción, para agilizar el test.",
   question_intro_enabled:
     "Antes de cada pregunta muestra (y lee, si la voz está activada) una pantalla con el tipo de respuesta y todas las opciones, para que te prepares. Luego pasa al flujo normal de respuesta.",
+  question_intro_seconds:
+    "Segundos que permanece la pantalla explicativa cuando la voz está desactivada antes de pasar a responder. Con voz, se cierra al terminar la lectura. Siempre puedes adelantarla con el botón «Empezar a responder».",
   selection_sound_enabled:
     "Reproduce un sonido al confirmar la respuesta con la mirada, como aviso de qué se ha elegido (uno para Sí y otro para No).",
   selection_sound_yes: "Sonido que suena al confirmar una respuesta «Sí».",
@@ -459,6 +461,19 @@ export function SettingsPage({
               onChange={(event) => update("question_intro_enabled", event.target.checked)}
             />
           </label>
+
+          {draft.question_intro_enabled ? (
+            <RangeSetting
+              label="Duración de la pantalla explicativa sin voz"
+              value={draft.question_intro_seconds}
+              min={2}
+              max={15}
+              step={1}
+              suffix=" s"
+              tooltip={TOOLTIPS.question_intro_seconds}
+              onChange={(value) => update("question_intro_seconds", value)}
+            />
+          ) : null}
 
           {draft.tts_enabled ? (
             <>

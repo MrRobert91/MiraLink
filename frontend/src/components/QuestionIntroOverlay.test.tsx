@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import {
   QuestionIntroOverlay,
@@ -90,6 +91,37 @@ describe("QuestionIntroOverlay", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("el botón 'Empezar a responder' cierra la pantalla manualmente", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    render(
+      <QuestionIntroOverlay
+        question={radioQuestion}
+        questionIndex={0}
+        totalQuestions={1}
+        durationMs={0}
+        onComplete={onComplete}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Empezar a responder" }));
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("muestra la barra de navegación pasada por prop", () => {
+    render(
+      <QuestionIntroOverlay
+        question={radioQuestion}
+        questionIndex={0}
+        totalQuestions={1}
+        durationMs={0}
+        toolbar={<div data-testid="toolbar" />}
+        onComplete={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("toolbar")).toBeInTheDocument();
   });
 
   it("no programa temporizador con durationMs 0 (modo con voz)", () => {

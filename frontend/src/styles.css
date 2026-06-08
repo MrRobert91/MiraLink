@@ -1986,13 +1986,23 @@ input[type="range"] {
   position: fixed;
   inset: 0;
   z-index: 36;
-  display: grid;
-  place-items: center;
-  padding: clamp(16px, 4vw, 48px);
+  display: flex;
+  flex-direction: column;
   background:
     radial-gradient(circle at center, var(--accent-soft), transparent 45%),
     var(--overlay-bg);
   backdrop-filter: blur(6px);
+}
+
+/* La barra de navegación va arriba; el resto del overlay centra el contenido. */
+.question-intro__toolbar {
+  flex: 0 0 auto;
+}
+
+.question-intro-overlay > .question-intro {
+  flex: 1 1 auto;
+  align-self: center;
+  margin: auto;
 }
 
 .question-intro {
@@ -2051,6 +2061,103 @@ input[type="range"] {
   margin: 0;
   color: var(--muted);
   font-size: clamp(0.95rem, 1.5vw, 1.2rem);
+}
+
+.question-intro__start {
+  justify-self: center;
+  margin-top: clamp(6px, 1.5vh, 14px);
+}
+
+/* Pausa manual: pantalla a pantalla completa que solo se quita con el ratón. */
+.pause-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 97;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.pause-overlay__card {
+  width: min(560px, 100%);
+  display: grid;
+  gap: clamp(14px, 2.4vh, 24px);
+  place-items: center;
+  text-align: center;
+  padding: clamp(24px, 4vw, 48px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.pause-overlay__label {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pause-overlay__hint {
+  margin: 0;
+  max-width: 36ch;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.25rem);
+}
+
+/* Cuenta atrás (3,2,1) solo visual antes de los puntos de calibración. */
+.calibration-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: var(--overlay-bg);
+  overflow: hidden;
+}
+
+.calibration-countdown__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.calibration-countdown__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(8px, 2vh, 18px);
+  place-items: center;
+  text-align: center;
+  color: var(--text);
+}
+
+.calibration-countdown__label {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.8rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.calibration-countdown__value {
+  margin: 0;
+  font-size: clamp(5rem, 20vw, 12rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.calibration-countdown__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.25rem);
 }
 
 /* Pregunta personalizada: tarjeta de redacción (facilitador) y botón de cancelar. */

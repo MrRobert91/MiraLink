@@ -14,6 +14,7 @@ describe("AnsweringToolbar", () => {
         totalSteps={8}
         trackingReady
         onExit={() => undefined}
+        onPause={() => undefined}
         onOpenSettings={onOpenSettings}
         onCustomQuestion={() => undefined}
       />,
@@ -27,6 +28,26 @@ describe("AnsweringToolbar", () => {
     expect(screen.queryByText("Seguimiento listo")).not.toBeInTheDocument();
   });
 
+  it("activa la pausa al pulsar el botón Pausa", async () => {
+    const user = userEvent.setup();
+    const onPause = vi.fn();
+
+    render(
+      <AnsweringToolbar
+        currentStep={2}
+        totalSteps={5}
+        trackingReady
+        onExit={() => undefined}
+        onPause={onPause}
+        onOpenSettings={() => undefined}
+        onCustomQuestion={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pausa" }));
+    expect(onPause).toHaveBeenCalledOnce();
+  });
+
   it("triggers the custom question flow and shows the initializing label", async () => {
     const user = userEvent.setup();
     const onCustomQuestion = vi.fn();
@@ -37,6 +58,7 @@ describe("AnsweringToolbar", () => {
         totalSteps={4}
         trackingReady={false}
         onExit={() => undefined}
+        onPause={() => undefined}
         onOpenSettings={() => undefined}
         onCustomQuestion={onCustomQuestion}
       />,
