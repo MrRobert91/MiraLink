@@ -1981,6 +1981,78 @@ input[type="range"] {
   font-size: clamp(1rem, 1.6vw, 1.25rem);
 }
 
+/* Pantalla explicativa que se intercala antes de cada pregunta. */
+.question-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 36;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background:
+    radial-gradient(circle at center, var(--accent-soft), transparent 45%),
+    var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.question-intro {
+  width: min(900px, 100%);
+  display: grid;
+  gap: clamp(12px, 2.4vh, 24px);
+  text-align: center;
+  padding: clamp(24px, 4vw, 48px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.question-intro__type {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: clamp(1rem, 1.8vw, 1.4rem);
+}
+
+.question-intro__title {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+  color: var(--text);
+}
+
+.question-intro__lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.6vw, 1.25rem);
+}
+
+.question-intro__options {
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  width: min(560px, 100%);
+}
+
+.question-intro__options li {
+  padding: clamp(10px, 1.6vh, 16px) clamp(14px, 2vw, 22px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2, var(--bg));
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  font-weight: 600;
+}
+
+.question-intro__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.5vw, 1.2rem);
+}
+
 /* Pregunta personalizada: tarjeta de redacción (facilitador) y botón de cancelar. */
 .custom-question-overlay {
   position: fixed;

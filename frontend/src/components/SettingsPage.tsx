@@ -51,6 +51,10 @@ const TOOLTIPS = {
     "Velocidad de la lectura en voz alta. Súbela si la voz va muy lenta; bájala si cuesta entenderla.",
   custom_question_voice:
     "Voz para las preguntas personalizadas. «Igual que la encuesta» reutiliza la voz de arriba; puedes elegir una distinta. Con voz de backend, el audio se genera al mostrar la pregunta.",
+  tts_read_question_once:
+    "Lee el enunciado de la pregunta solo en su primera opción; en las siguientes opciones lee únicamente la opción, para agilizar el test.",
+  question_intro_enabled:
+    "Antes de cada pregunta muestra (y lee, si la voz está activada) una pantalla con el tipo de respuesta y todas las opciones, para que te prepares. Luego pasa al flujo normal de respuesta.",
   selection_sound_enabled:
     "Reproduce un sonido al confirmar la respuesta con la mirada, como aviso de qué se ha elegido (uno para Sí y otro para No).",
   selection_sound_yes: "Sonido que suena al confirmar una respuesta «Sí».",
@@ -440,6 +444,22 @@ export function SettingsPage({
             />
           </label>
 
+          <label className="toggle-control">
+            <span className="setting-control__label">
+              Pantalla explicativa antes de cada pregunta
+              <SettingTooltip
+                label="Pantalla explicativa antes de cada pregunta"
+                text={TOOLTIPS.question_intro_enabled}
+              />
+            </span>
+            <input
+              aria-label="Pantalla explicativa antes de cada pregunta"
+              type="checkbox"
+              checked={draft.question_intro_enabled}
+              onChange={(event) => update("question_intro_enabled", event.target.checked)}
+            />
+          </label>
+
           {draft.tts_enabled ? (
             <>
               <label className="setting-control setting-control--select">
@@ -501,6 +521,22 @@ export function SettingsPage({
                 tooltip={TOOLTIPS.tts_rate}
                 onChange={(value) => update("tts_rate", value)}
               />
+
+              <label className="toggle-control">
+                <span className="setting-control__label">
+                  Leer el enunciado solo una vez
+                  <SettingTooltip
+                    label="Leer el enunciado solo una vez"
+                    text={TOOLTIPS.tts_read_question_once}
+                  />
+                </span>
+                <input
+                  aria-label="Leer el enunciado solo una vez"
+                  type="checkbox"
+                  checked={draft.tts_read_question_once}
+                  onChange={(event) => update("tts_read_question_once", event.target.checked)}
+                />
+              </label>
 
               {!ttsBrowserSupported ? (
                 <p className="inline-message inline-message--error">

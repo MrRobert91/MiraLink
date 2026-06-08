@@ -33,6 +33,8 @@ class ProfilePreferences(BaseModel):
     selection_sound_no: str = ""
     reading_lock_seconds: int = 4
     custom_question_voice_id: str = ""
+    tts_read_question_once: bool = False
+    question_intro_enabled: bool = False
 
 
 class UserProfile(BaseModel):
@@ -82,7 +84,9 @@ class SqliteProfileStore:
                     selection_sound_yes TEXT NOT NULL DEFAULT '',
                     selection_sound_no TEXT NOT NULL DEFAULT '',
                     reading_lock_seconds INTEGER NOT NULL DEFAULT 4,
-                    custom_question_voice_id TEXT NOT NULL DEFAULT ''
+                    custom_question_voice_id TEXT NOT NULL DEFAULT '',
+                    tts_read_question_once INTEGER NOT NULL DEFAULT 0,
+                    question_intro_enabled INTEGER NOT NULL DEFAULT 0
                 );
                 """
             )
@@ -114,6 +118,8 @@ class SqliteProfileStore:
                 "selection_sound_no": "TEXT NOT NULL DEFAULT ''",
                 "reading_lock_seconds": "INTEGER NOT NULL DEFAULT 4",
                 "custom_question_voice_id": "TEXT NOT NULL DEFAULT ''",
+                "tts_read_question_once": "INTEGER NOT NULL DEFAULT 0",
+                "question_intro_enabled": "INTEGER NOT NULL DEFAULT 0",
             }
             for column_name, definition in migration_columns.items():
                 if column_name not in existing_columns:
@@ -144,9 +150,10 @@ class SqliteProfileStore:
                     eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
                     tts_enabled, tts_voice_id, tts_rate,
                     answer_labels, selection_sound_enabled, selection_sound_yes,
-                    selection_sound_no, reading_lock_seconds, custom_question_voice_id
+                    selection_sound_no, reading_lock_seconds, custom_question_voice_id,
+                    tts_read_question_once, question_intro_enabled
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -173,7 +180,9 @@ class SqliteProfileStore:
                     selection_sound_yes=excluded.selection_sound_yes,
                     selection_sound_no=excluded.selection_sound_no,
                     reading_lock_seconds=excluded.reading_lock_seconds,
-                    custom_question_voice_id=excluded.custom_question_voice_id
+                    custom_question_voice_id=excluded.custom_question_voice_id,
+                    tts_read_question_once=excluded.tts_read_question_once,
+                    question_intro_enabled=excluded.question_intro_enabled
                 """,
                 (
                     user_id,
@@ -203,6 +212,8 @@ class SqliteProfileStore:
                     preferences.selection_sound_no,
                     preferences.reading_lock_seconds,
                     preferences.custom_question_voice_id,
+                    int(preferences.tts_read_question_once),
+                    int(preferences.question_intro_enabled),
                 ),
             )
         return self.get_profile(user_id)
@@ -219,7 +230,8 @@ class SqliteProfileStore:
                        eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
                        tts_enabled, tts_voice_id, tts_rate,
                        answer_labels, selection_sound_enabled, selection_sound_yes,
-                       selection_sound_no, reading_lock_seconds, custom_question_voice_id
+                       selection_sound_no, reading_lock_seconds, custom_question_voice_id,
+                       tts_read_question_once, question_intro_enabled
                 FROM profile_preferences
                 WHERE user_id = ?
                 """,
@@ -255,5 +267,7 @@ class SqliteProfileStore:
                 selection_sound_no=preference_row["selection_sound_no"],
                 reading_lock_seconds=preference_row["reading_lock_seconds"],
                 custom_question_voice_id=preference_row["custom_question_voice_id"],
+                tts_read_question_once=bool(preference_row["tts_read_question_once"]),
+                question_intro_enabled=bool(preference_row["question_intro_enabled"]),
             ),
         )

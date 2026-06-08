@@ -10,6 +10,7 @@ import { CalibrationInstructions, calibrationSpeechText } from "./components/Cal
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { EyeRestOverlay, eyeRestPromptText } from "./components/EyeRestOverlay";
 import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
+import { QuestionIntroOverlay, questionIntroSpeechText } from "./components/QuestionIntroOverlay";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
 import { SettingsPage } from "./components/SettingsPage";
@@ -130,6 +131,12 @@ export default function App() {
   const [selectionSoundNo, setSelectionSoundNo] = useState("");
   const [readingLockSeconds, setReadingLockSeconds] = useState(4);
   const [customQuestionVoiceId, setCustomQuestionVoiceId] = useState("");
+  const [ttsReadQuestionOnce, setTtsReadQuestionOnce] = useState(false);
+  const [questionIntroEnabled, setQuestionIntroEnabled] = useState(false);
+  // Pantalla explicativa que se intercala antes de cada pregunta.
+  const [questionIntroPhase, setQuestionIntroPhase] = useState<"idle" | "showing">("idle");
+  // Preguntas (por id) ya presentadas, para no repetir la pantalla al retroceder.
+  const introducedQuestionsRef = useRef<Set<string>>(new Set());
   // Bloqueo de lectura: dwell suspendido al salir cada pregunta (modo sin voz).
   const [readingLockActive, setReadingLockActive] = useState(false);
   const [customReadingLock, setCustomReadingLock] = useState(false);
@@ -190,6 +197,12 @@ export default function App() {
   });
 
   const activeStep = formFlow.steps[formFlow.currentStepIndex] ?? null;
+  const activeQuestion =
+    activeStep && formFlow.form ? formFlow.form.questions[activeStep.questionIndex] ?? null : null;
+  // Al cargar/reiniciar un formulario, ninguna pregunta se ha presentado todavía.
+  useEffect(() => {
+    introducedQuestionsRef.current = new Set();
+  }, [formFlow.form?.form_id]);
   const rawPoint = frame?.rawPoint ?? null;
   const correctedPoint = useMemo(() => {
     if (!frame) {
@@ -332,6 +345,17 @@ export default function App() {
     onEnd: triggerReadyPulse,
   });
 
+  // Voz dedicada para la pantalla explicativa previa a cada pregunta. Al terminar
+  // la locución se cierra la pantalla (vía un ref para evitar el orden de
+  // declaración con resetDwell, definido más abajo).
+  const questionIntroCompleteRef = useRef<() => void>(() => {});
+  const { speak: speakIntro, cancel: cancelIntroSpeech } = useSpeech({
+    voiceId: ttsVoiceId,
+    rate: ttsRate,
+    getAudioUrl,
+    onEnd: () => questionIntroCompleteRef.current(),
+  });
+
   // Prepara (para voces de backend) el audio de un texto generado al vuelo y
   // devuelve su URL para reproducirlo de inmediato. Cachea también en
   // `ttsAudioUrls`. Con voz de navegador no hay nada que preparar (devuelve null
@@ -358,7 +382,8 @@ export default function App() {
   // zonas Sí/No del formulario quedan suspendidas: no se alimenta su dwell.
   // Mientras se lee una pregunta en voz alta el dwell también se congela, para
   // que el usuario pueda escuchar sin seleccionar sin querer.
-  const overlaysIdle = eyeRestPhase === "idle" && customQuestionPhase === "idle";
+  const overlaysIdle =
+    eyeRestPhase === "idle" && customQuestionPhase === "idle" && questionIntroPhase === "idle";
   const formGazePoint =
     overlaysIdle && !isSpeaking && !readingLockActive ? actionablePoint : null;
 
@@ -403,9 +428,17 @@ export default function App() {
     resolveTargetId: resolveRestTargetId,
   });
 
-  // Texto que se lee por cada paso: pregunta + opción presentada.
-  const stepSpeechText = (step: { questionTitle: string; optionLabel: string }) =>
-    `${step.questionTitle}. ${step.optionLabel}`;
+  // Texto que se lee por cada paso: pregunta + opción presentada. Con la opción
+  // "leer enunciado una vez", solo la primera opción de cada pregunta incluye el
+  // enunciado; las siguientes leen únicamente la opción para agilizar.
+  const stepSpeechText = (step: {
+    questionTitle: string;
+    optionLabel: string;
+    optionIndex: number;
+  }) =>
+    ttsReadQuestionOnce && step.optionIndex > 0
+      ? step.optionLabel
+      : `${step.questionTitle}. ${step.optionLabel}`;
 
   // Para voces de backend, genera/reutiliza los audios del formulario al
   // cargarlo (generación anticipada). Con voz de navegador no hay nada que
@@ -434,7 +467,8 @@ export default function App() {
         setTtsAudioUrls({});
       }
     },
-    [ttsEnabled, ttsVoiceId],
+    // `stepSpeechText` depende de `ttsReadQuestionOnce`; debe regenerar las claves.
+    [ttsEnabled, ttsVoiceId, ttsReadQuestionOnce],
   );
 
   // Lee la pregunta + opción activas al cambiar de paso mientras se responde.
@@ -447,7 +481,79 @@ export default function App() {
       return;
     }
     speakText(stepSpeechText(activeStep));
-  }, [ttsEnabled, formFlow.status, activeStep, overlaysIdle, speakText, cancelSpeech]);
+  }, [ttsEnabled, formFlow.status, activeStep, overlaysIdle, ttsReadQuestionOnce, speakText, cancelSpeech]);
+
+  // Pantalla explicativa: al entrar en una pregunta aún no presentada se intercala
+  // una pantalla que muestra/lee su tipo y opciones. Mientras se muestra,
+  // `overlaysIdle` es falso, así que el dwell y la locución del paso quedan
+  // congelados. Cada pregunta se presenta una sola vez (no al retroceder).
+  useEffect(() => {
+    if (
+      !questionIntroEnabled ||
+      formFlow.status !== "answering" ||
+      !activeStep ||
+      questionIntroPhase !== "idle" ||
+      eyeRestPhase !== "idle" ||
+      customQuestionPhase !== "idle"
+    ) {
+      return;
+    }
+    if (introducedQuestionsRef.current.has(activeStep.questionId)) {
+      return;
+    }
+    introducedQuestionsRef.current.add(activeStep.questionId);
+    setQuestionIntroPhase("showing");
+  }, [
+    questionIntroEnabled,
+    formFlow.status,
+    activeStep,
+    questionIntroPhase,
+    eyeRestPhase,
+    customQuestionPhase,
+  ]);
+
+  // Cierre de la pantalla explicativa: lo dispara el fin de la locución (con voz)
+  // o el temporizador del overlay (sin voz). Se publica en un ref para que la
+  // instancia de voz `speakIntro` (creada antes que `resetDwell`) pueda invocarlo.
+  const handleQuestionIntroComplete = useCallback(() => {
+    cancelIntroSpeech();
+    setQuestionIntroPhase("idle");
+    resetDwell();
+  }, [cancelIntroSpeech, resetDwell]);
+
+  useEffect(() => {
+    questionIntroCompleteRef.current = handleQuestionIntroComplete;
+  }, [handleQuestionIntroComplete]);
+
+  // Locución de la pantalla explicativa (con voz). Para voces de backend genera el
+  // audio al vuelo antes de leerlo. Sin voz no se lee: el overlay se cierra con su
+  // propio temporizador.
+  useEffect(() => {
+    if (questionIntroPhase !== "showing" || !ttsEnabled || !activeQuestion) {
+      return;
+    }
+    let cancelled = false;
+    const text = questionIntroSpeechText(activeQuestion, activeStep?.questionIndex ?? 0);
+    void (async () => {
+      const url = await prepareAudioUrl(text, ttsVoiceId, "question-intro");
+      if (!cancelled) {
+        speakIntro(text, url);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      cancelIntroSpeech();
+    };
+  }, [
+    questionIntroPhase,
+    ttsEnabled,
+    activeQuestion,
+    activeStep?.questionIndex,
+    ttsVoiceId,
+    prepareAudioUrl,
+    speakIntro,
+    cancelIntroSpeech,
+  ]);
 
   // Bloqueo de lectura (modo sin voz): al aparecer cada pregunta se suspende el
   // dwell durante los segundos configurados para dar tiempo a leer; al expirar,
@@ -606,8 +712,12 @@ export default function App() {
         setCustomQuestionPhase("idle");
         setCustomQuestionText("");
       }
+      if (questionIntroPhase !== "idle") {
+        cancelIntroSpeech();
+        setQuestionIntroPhase("idle");
+      }
     }
-  }, [customQuestionPhase, eyeRestPhase, formFlow.status, resetRestDwell]);
+  }, [customQuestionPhase, eyeRestPhase, questionIntroPhase, formFlow.status, resetRestDwell, cancelIntroSpeech]);
 
   useEffect(() => {
     frameRef.current = frame;
@@ -1019,6 +1129,8 @@ export default function App() {
         setSelectionSoundNo(preferences.selection_sound_no);
         setReadingLockSeconds(preferences.reading_lock_seconds);
         setCustomQuestionVoiceId(preferences.custom_question_voice_id);
+        setTtsReadQuestionOnce(preferences.tts_read_question_once);
+        setQuestionIntroEnabled(preferences.question_intro_enabled);
       } catch {
         if (!cancelled) {
           setPreferencesError(
@@ -1062,6 +1174,8 @@ export default function App() {
       selection_sound_no: selectionSoundNo,
       reading_lock_seconds: readingLockSeconds,
       custom_question_voice_id: customQuestionVoiceId,
+      tts_read_question_once: ttsReadQuestionOnce,
+      question_intro_enabled: questionIntroEnabled,
     }),
     [
       dwellMs,
@@ -1088,6 +1202,8 @@ export default function App() {
       selectionSoundNo,
       readingLockSeconds,
       customQuestionVoiceId,
+      ttsReadQuestionOnce,
+      questionIntroEnabled,
     ],
   );
 
@@ -1122,6 +1238,8 @@ export default function App() {
       setSelectionSoundNo(saved.selection_sound_no);
       setReadingLockSeconds(saved.reading_lock_seconds);
       setCustomQuestionVoiceId(saved.custom_question_voice_id);
+      setTtsReadQuestionOnce(saved.tts_read_question_once);
+      setQuestionIntroEnabled(saved.question_intro_enabled);
       setPreferencesSaved(true);
       return true;
     } catch {
@@ -1268,6 +1386,22 @@ export default function App() {
           onShow={handleShowCustomQuestion}
           onAnswer={handleAnswerCustomQuestion}
           onCancel={handleCancelCustomQuestion}
+        />
+      ) : null}
+
+      {questionIntroPhase !== "idle" && activeQuestion && activeStep ? (
+        <QuestionIntroOverlay
+          question={activeQuestion}
+          questionIndex={activeStep.questionIndex}
+          totalQuestions={activeStep.totalQuestions}
+          // Sin voz se cierra tras un tiempo proporcional al nº de opciones. Con
+          // voz, el cierre normal lo dispara el fin de la locución (onEnd); el
+          // temporizador actúa solo como red de seguridad (+15s) por si la voz
+          // falla y onEnd no llega, para que la pantalla no se quede bloqueada.
+          durationMs={
+            2500 + activeQuestion.options.length * 1800 + (ttsEnabled ? 15000 : 0)
+          }
+          onComplete={handleQuestionIntroComplete}
         />
       ) : null}
 
