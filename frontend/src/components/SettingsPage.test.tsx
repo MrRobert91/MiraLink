@@ -126,7 +126,6 @@ describe("SettingsPage", () => {
         saved={false}
         onSave={onSave}
         ttsVoices={[
-          { id: "browser:Helena", label: "Helena (es-ES)", engine: "browser", lang: "es-ES" },
           { id: "piper:es_ES-davefx-medium", label: "Español (Piper)", engine: "piper", lang: "es-ES" },
         ]}
       />,
@@ -144,23 +143,6 @@ describe("SettingsPage", () => {
       tts_enabled: true,
       tts_voice_id: "piper:es_ES-davefx-medium",
     });
-  });
-
-  it("avisa cuando el navegador no tiene voces disponibles", () => {
-    render(
-      <SettingsPage
-        preferences={{ ...defaultMiraLinkPreferences, tts_enabled: true }}
-        saving={false}
-        error={null}
-        saved={false}
-        onSave={vi.fn()}
-        ttsBrowserSupported={false}
-      />,
-    );
-
-    expect(
-      screen.getByText(/no está disponible en este dispositivo/i),
-    ).toBeInTheDocument();
   });
 
   it("cancels changes and returns to the active form", async () => {

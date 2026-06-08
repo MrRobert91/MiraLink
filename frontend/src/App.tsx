@@ -37,7 +37,7 @@ import {
 import type { SubmitFormPayload } from "./lib/api";
 import { REST_TARGET_ID, resolveBinaryDecisionTarget, resolveRestBand } from "./lib/decisionZone";
 import { buildDecisionSteps, createInitialFormFlowState, formFlowReducer } from "./lib/formFlow";
-import { BROWSER_ENGINE, voiceEngine } from "./lib/speech";
+import { resolveVoiceId } from "./lib/speech";
 import {
   applyCalibrationToFrame,
   averageFeatureVectors,
@@ -132,7 +132,6 @@ export default function App() {
   const [selectionSoundYes, setSelectionSoundYes] = useState("");
   const [selectionSoundNo, setSelectionSoundNo] = useState("");
   const [readingLockSeconds, setReadingLockSeconds] = useState(4);
-  const [customQuestionVoiceId, setCustomQuestionVoiceId] = useState("");
   const [ttsReadQuestionOnce, setTtsReadQuestionOnce] = useState(false);
   const [questionIntroEnabled, setQuestionIntroEnabled] = useState(false);
   const [questionIntroSeconds, setQuestionIntroSeconds] = useState(6);
@@ -338,21 +337,18 @@ export default function App() {
   const triggerReadyPulse = useCallback(() => setReadyPulse((value) => value + 1), []);
 
   const { speak: speakText, cancel: cancelSpeech, isSpeaking } = useSpeech({
-    voiceId: ttsVoiceId,
     rate: ttsRate,
     getAudioUrl,
     onEnd: triggerReadyPulse,
   });
 
-  // Voz independiente para las preguntas personalizadas. Vacío = misma que la
-  // encuesta. Comparte el mapa de audios (clave = texto) con la voz principal.
-  const effectiveCustomVoiceId = customQuestionVoiceId || ttsVoiceId;
+  // Voz para las preguntas personalizadas: la misma voz principal de Piper.
+  // Comparte el mapa de audios (clave = texto) con la voz principal.
   const {
     speak: speakCustom,
     cancel: cancelCustomSpeech,
     isSpeaking: isCustomSpeaking,
   } = useSpeech({
-    voiceId: effectiveCustomVoiceId,
     rate: ttsRate,
     getAudioUrl,
     onEnd: triggerReadyPulse,
@@ -363,28 +359,22 @@ export default function App() {
   // declaración con resetDwell, definido más abajo).
   const questionIntroCompleteRef = useRef<() => void>(() => {});
   const { speak: speakIntro, cancel: cancelIntroSpeech } = useSpeech({
-    voiceId: ttsVoiceId,
     rate: ttsRate,
     getAudioUrl,
     onEnd: () => questionIntroCompleteRef.current(),
   });
 
-  // Prepara (para voces de backend) el audio de un texto generado al vuelo y
-  // devuelve su URL para reproducirlo de inmediato. Cachea también en
-  // `ttsAudioUrls`. Con voz de navegador no hay nada que preparar (devuelve null
-  // y `useSpeech` sintetiza al vuelo).
+  // Prepara el audio (Piper) de un texto generado al vuelo y devuelve su URL para
+  // reproducirlo de inmediato. Cachea también en `ttsAudioUrls`. Si la
+  // preparación falla devuelve null y `useSpeech` no leerá nada (silencio).
   const prepareAudioUrl = useCallback(
     async (text: string, voiceId: string, cacheKey: string): Promise<string | null> => {
-      const engine = voiceId ? voiceEngine(voiceId) : BROWSER_ENGINE;
-      if (engine === BROWSER_ENGINE) {
-        return null;
-      }
       try {
-        const urls = await prepareFormAudio(cacheKey, voiceId, [{ key: text, text }]);
+        const urls = await prepareFormAudio(cacheKey, resolveVoiceId(voiceId), [{ key: text, text }]);
         setTtsAudioUrls((previous) => ({ ...previous, ...urls }));
         return urls[text] ?? null;
       } catch {
-        // Si falla la preparación, se reproduce con la voz del navegador.
+        // Si falla la preparación, no se lee (silencio + aviso visual).
         return null;
       }
     },
@@ -453,17 +443,11 @@ export default function App() {
       ? step.optionLabel
       : `${step.questionTitle}. ${step.optionLabel}`;
 
-  // Para voces de backend, genera/reutiliza los audios del formulario al
-  // cargarlo (generación anticipada). Con voz de navegador no hay nada que
-  // preparar y `useSpeech` sintetiza al vuelo.
+  // Genera/reutiliza los audios (Piper) del formulario al cargarlo (generación
+  // anticipada). Si la preparación falla, no se leerá nada (silencio).
   const prepareTtsForForm = useCallback(
     async (form: ImportedForm) => {
       if (!ttsEnabled) {
-        setTtsAudioUrls({});
-        return;
-      }
-      const engine = ttsVoiceId ? voiceEngine(ttsVoiceId) : BROWSER_ENGINE;
-      if (engine === BROWSER_ENGINE) {
         setTtsAudioUrls({});
         return;
       }
@@ -471,12 +455,12 @@ export default function App() {
       try {
         const urls = await prepareFormAudio(
           form.form_id,
-          ttsVoiceId,
+          resolveVoiceId(ttsVoiceId),
           texts.map((text) => ({ key: text, text })),
         );
         setTtsAudioUrls(urls);
       } catch {
-        // Si la preparación falla, useSpeech cae a la voz del navegador.
+        // Si la preparación falla, no se lee (silencio + aviso visual).
         setTtsAudioUrls({});
       }
     },
@@ -488,13 +472,37 @@ export default function App() {
   // Mientras hay un overlay activo (descanso / pregunta personalizada) no se lee:
   // así preparar su audio (que cambia `ttsAudioUrls` y, con él, `speakText`) no
   // re-dispara este efecto y pisa la locución del overlay con la del formulario.
+  // Si la pregunta todavía tiene pantalla explicativa pendiente (aún no marcada
+  // como introducida) tampoco se lee: evita el parpadeo en el que se locuta el
+  // paso un instante antes de que la pantalla explicativa se marque como visible.
   useEffect(() => {
-    if (!ttsEnabled || formFlow.status !== "answering" || !activeStep || !overlaysIdle || paused) {
+    const introPending =
+      questionIntroEnabled &&
+      !!activeStep &&
+      !introducedQuestionsRef.current.has(activeStep.questionId);
+    if (
+      !ttsEnabled ||
+      formFlow.status !== "answering" ||
+      !activeStep ||
+      !overlaysIdle ||
+      paused ||
+      introPending
+    ) {
       cancelSpeech();
       return;
     }
     speakText(stepSpeechText(activeStep));
-  }, [ttsEnabled, formFlow.status, activeStep, overlaysIdle, paused, ttsReadQuestionOnce, speakText, cancelSpeech]);
+  }, [
+    ttsEnabled,
+    formFlow.status,
+    activeStep,
+    overlaysIdle,
+    paused,
+    questionIntroEnabled,
+    ttsReadQuestionOnce,
+    speakText,
+    cancelSpeech,
+  ]);
 
   // Pantalla explicativa: al entrar en una pregunta aún no presentada se intercala
   // una pantalla que muestra/lee su tipo y opciones. Mientras se muestra,
@@ -552,9 +560,10 @@ export default function App() {
     resetDwell();
   }, [resetDwell]);
 
-  // Locución de la pantalla explicativa (con voz). Para voces de backend genera el
-  // audio al vuelo antes de leerlo. Sin voz no se lee: el overlay se cierra con su
-  // propio temporizador.
+  // Locución de la pantalla explicativa (con voz). Genera el audio (Piper) al
+  // vuelo y lo lee; al terminar la locución se cierra la pantalla (onEnd). Si el
+  // audio no se puede preparar (silencio) no se lee, pero la pantalla se mantiene
+  // los segundos configurados antes de cerrarse, para dar tiempo a leerla.
   useEffect(() => {
     if (
       questionIntroPhase !== "showing" ||
@@ -567,16 +576,29 @@ export default function App() {
       return;
     }
     let cancelled = false;
+    let silentTimer: number | undefined;
     const text = questionIntroSpeechText(activeQuestion, activeStep?.questionIndex ?? 0);
     void (async () => {
       const url = await prepareAudioUrl(text, ttsVoiceId, "question-intro");
-      if (!cancelled) {
+      if (cancelled) {
+        return;
+      }
+      if (url) {
         speakIntro(text, url);
+      } else {
+        // Sin audio: mantener la pantalla los segundos configurados y cerrar.
+        silentTimer = window.setTimeout(
+          () => questionIntroCompleteRef.current(),
+          Math.max(questionIntroSeconds, 1) * 1000,
+        );
       }
     })();
     return () => {
       cancelled = true;
       cancelIntroSpeech();
+      if (silentTimer !== undefined) {
+        window.clearTimeout(silentTimer);
+      }
     };
   }, [
     questionIntroPhase,
@@ -587,6 +609,7 @@ export default function App() {
     eyeRestPhase,
     customQuestionPhase,
     ttsVoiceId,
+    questionIntroSeconds,
     prepareAudioUrl,
     speakIntro,
     cancelIntroSpeech,
@@ -691,20 +714,13 @@ export default function App() {
     async (text: string) => {
       setCustomQuestionText(text);
 
-      // Si la lectura en voz alta está activa y la voz personalizada es de
-      // backend, hay que generar el audio al vuelo y esperar antes de mostrar la
-      // pregunta para poder leerla con esa misma voz. Con voz de navegador se
-      // muestra y se lee directamente.
+      // Si la lectura en voz alta está activa, generamos el audio (Piper) al vuelo
+      // y esperamos antes de mostrar la pregunta para poder leerla.
       let audioUrl: string | null = null;
       if (ttsEnabled) {
-        const engine = effectiveCustomVoiceId
-          ? voiceEngine(effectiveCustomVoiceId)
-          : BROWSER_ENGINE;
-        if (engine !== BROWSER_ENGINE) {
-          setCustomQuestionLoading(true);
-          audioUrl = await prepareAudioUrl(text, effectiveCustomVoiceId, "custom-question");
-          setCustomQuestionLoading(false);
-        }
+        setCustomQuestionLoading(true);
+        audioUrl = await prepareAudioUrl(text, ttsVoiceId, "custom-question");
+        setCustomQuestionLoading(false);
       }
 
       setCustomQuestionPhase("asking");
@@ -712,7 +728,7 @@ export default function App() {
         speakCustom(text, audioUrl);
       }
     },
-    [ttsEnabled, effectiveCustomVoiceId, speakCustom, prepareAudioUrl],
+    [ttsEnabled, ttsVoiceId, speakCustom, prepareAudioUrl],
   );
 
   const handleAnswerCustomQuestion = useCallback(
@@ -1202,7 +1218,6 @@ export default function App() {
         setSelectionSoundYes(preferences.selection_sound_yes);
         setSelectionSoundNo(preferences.selection_sound_no);
         setReadingLockSeconds(preferences.reading_lock_seconds);
-        setCustomQuestionVoiceId(preferences.custom_question_voice_id);
         setTtsReadQuestionOnce(preferences.tts_read_question_once);
         setQuestionIntroEnabled(preferences.question_intro_enabled);
         setQuestionIntroSeconds(preferences.question_intro_seconds);
@@ -1248,7 +1263,6 @@ export default function App() {
       selection_sound_yes: selectionSoundYes,
       selection_sound_no: selectionSoundNo,
       reading_lock_seconds: readingLockSeconds,
-      custom_question_voice_id: customQuestionVoiceId,
       tts_read_question_once: ttsReadQuestionOnce,
       question_intro_enabled: questionIntroEnabled,
       question_intro_seconds: questionIntroSeconds,
@@ -1277,7 +1291,6 @@ export default function App() {
       selectionSoundYes,
       selectionSoundNo,
       readingLockSeconds,
-      customQuestionVoiceId,
       ttsReadQuestionOnce,
       questionIntroEnabled,
       questionIntroSeconds,
@@ -1314,7 +1327,6 @@ export default function App() {
       setSelectionSoundYes(saved.selection_sound_yes);
       setSelectionSoundNo(saved.selection_sound_no);
       setReadingLockSeconds(saved.reading_lock_seconds);
-      setCustomQuestionVoiceId(saved.custom_question_voice_id);
       setTtsReadQuestionOnce(saved.tts_read_question_once);
       setQuestionIntroEnabled(saved.question_intro_enabled);
       setQuestionIntroSeconds(saved.question_intro_seconds);
@@ -1669,7 +1681,6 @@ export default function App() {
                 saved={preferencesSaved}
                 diagnostics={diagnostics}
                 ttsVoices={ttsVoices.voices}
-                ttsBrowserSupported={ttsVoices.browserSupported}
                 onSave={handleSavePreferences}
                 onReturnToForm={returnToAnswering ? handleReturnToAnswering : undefined}
               />

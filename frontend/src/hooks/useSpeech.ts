@@ -1,32 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  BROWSER_ENGINE,
-  findBrowserVoice,
-  isSpeechSynthesisSupported,
-  voiceEngine,
-} from "../lib/speech";
-
 type UseSpeechOptions = {
-  /** Id de voz seleccionado: "" (auto), "browser:<nombre>" o "<engine>:<id>". */
-  voiceId: string;
   rate: number;
-  /** Para voces de backend: URL de audio ya preparada para un texto, o null. */
+  /** URL de audio ya preparada para un texto, o null si aún no está disponible. */
   getAudioUrl?: (text: string) => string | null;
   /** Se invoca solo cuando la locución termina de forma natural (no al cancelar). */
   onEnd?: () => void;
 };
 
 /**
- * Lectura en voz alta unificada sobre dos motores. Expone una única API
+ * Lectura en voz alta basada en audio de backend (Piper). Expone una API única
  * (`speak`/`cancel`/`isSpeaking`) de modo que el resto de la app no necesita
- * saber si la voz es del navegador (SpeechSynthesis) o de backend (audio
- * cacheado). `isSpeaking` es uniforme: así el bloqueo de dwell funciona igual.
+ * saber cómo se genera el audio. `isSpeaking` se mantiene uniforme para que el
+ * bloqueo de dwell funcione igual.
+ *
+ * Si no hay audio disponible (sin preparar o fallo de reproducción) no se lee
+ * nada: se libera el bloqueo y se dispara `onEnd` para que el flujo avance
+ * (silencio + aviso visual), sin recurrir a la voz del navegador.
  */
-export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOptions) {
+export function useSpeech({ rate, getAudioUrl, onEnd }: UseSpeechOptions) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Ref para no recrear `speak`/`speakBrowser` cada vez que cambia el callback.
+  // Ref para no recrear `speak` cada vez que cambia el callback.
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
   const finishNaturally = useCallback(() => {
@@ -35,9 +30,6 @@ export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOption
   }, []);
 
   const cancel = useCallback(() => {
-    if (isSpeechSynthesisSupported()) {
-      window.speechSynthesis.cancel();
-    }
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
@@ -46,72 +38,46 @@ export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOption
     setIsSpeaking(false);
   }, []);
 
-  const speakBrowser = useCallback(
-    (text: string): boolean => {
-      if (!isSpeechSynthesisSupported()) {
-        return false;
-      }
-      const utterance = new SpeechSynthesisUtterance(text);
-      const voice = findBrowserVoice(voiceId);
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
-      } else {
-        utterance.lang = "es-ES";
-      }
-      utterance.rate = rate;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => finishNaturally();
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-      return true;
-    },
-    [voiceId, rate, finishNaturally],
-  );
-
   const speak = useCallback(
     /**
      * `audioUrlOverride` permite reproducir un audio recién preparado sin esperar
      * a que `getAudioUrl` (derivado de estado) se actualice: evita una condición
      * de carrera al locutar textos generados al vuelo (calibración, descanso,
-     * pregunta personalizada) con voces de backend.
+     * pregunta personalizada).
      */
     (text: string, audioUrlOverride?: string | null) => {
       cancel();
       if (!text.trim()) {
         return;
       }
-      const engine = voiceId ? voiceEngine(voiceId) : BROWSER_ENGINE;
-
-      if (engine !== BROWSER_ENGINE) {
-        const url = audioUrlOverride ?? getAudioUrl?.(text) ?? null;
-        if (url) {
-          const audio = new Audio(url);
-          audio.playbackRate = rate;
-          audioRef.current = audio;
-          audio.onended = () => finishNaturally();
-          audio.onerror = () => setIsSpeaking(false);
-          // Bloquea el dwell ya, antes de que el audio empiece a sonar.
-          setIsSpeaking(true);
-          void audio.play().catch(() => {
-            // Si el audio de backend no puede reproducirse, recurre al navegador.
-            if (audioRef.current === audio) {
-              audioRef.current = null;
-            }
-            if (!speakBrowser(text)) {
-              setIsSpeaking(false);
-            }
-          });
-          return;
+      const url = audioUrlOverride ?? getAudioUrl?.(text) ?? null;
+      if (!url) {
+        // Sin audio preparado: no se lee. Se libera el bloqueo y avanza el flujo.
+        finishNaturally();
+        return;
+      }
+      const audio = new Audio(url);
+      audio.playbackRate = rate;
+      audioRef.current = audio;
+      audio.onended = () => finishNaturally();
+      audio.onerror = () => {
+        // Fallo de carga del audio: tratamos como fin natural (silencio).
+        if (audioRef.current === audio) {
+          audioRef.current = null;
         }
-        // Sin audio preparado para este texto: cae a la voz del navegador.
-      }
-
-      if (!speakBrowser(text)) {
-        setIsSpeaking(false);
-      }
+        finishNaturally();
+      };
+      // Bloquea el dwell ya, antes de que el audio empiece a sonar.
+      setIsSpeaking(true);
+      void audio.play().catch(() => {
+        // Si el audio no puede reproducirse, no recurrimos al navegador: silencio.
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+        finishNaturally();
+      });
     },
-    [voiceId, rate, getAudioUrl, cancel, speakBrowser, finishNaturally],
+    [rate, getAudioUrl, cancel, finishNaturally],
   );
 
   // Cancela cualquier locución pendiente al desmontar.
@@ -121,6 +87,5 @@ export function useSpeech({ voiceId, rate, getAudioUrl, onEnd }: UseSpeechOption
     speak,
     cancel,
     isSpeaking,
-    supported: isSpeechSynthesisSupported(),
   };
 }

@@ -6,7 +6,6 @@ import { selectionSounds } from "../lib/selectionSounds";
 import { themeOptions, type MiraLinkPreferences, type ThemeName, type Voice } from "../types";
 
 const ENGINE_LABELS: Record<string, string> = {
-  browser: "Navegador",
   piper: "Piper",
   kokoro: "Kokoro",
 };
@@ -46,11 +45,9 @@ const TOOLTIPS = {
   tts_enabled:
     "Lee en voz alta cada pregunta y opción al mostrarse. La lectura congela la selección por mirada hasta que termina, para que puedas escuchar sin elegir sin querer.",
   tts_voice:
-    "Voz usada para leer las preguntas de la encuesta. «Automática» elige la primera voz en español disponible. Las voces de backend (Piper) suenan más naturales pero requieren conexión.",
+    "Voz usada para leer las preguntas. «Automática» usa la voz Piper por defecto. Las voces Piper suenan naturales pero requieren conexión con el backend.",
   tts_rate:
     "Velocidad de la lectura en voz alta. Súbela si la voz va muy lenta; bájala si cuesta entenderla.",
-  custom_question_voice:
-    "Voz para las preguntas personalizadas. «Igual que la encuesta» reutiliza la voz de arriba; puedes elegir una distinta. Con voz de backend, el audio se genera al mostrar la pregunta.",
   tts_read_question_once:
     "Lee el enunciado de la pregunta solo en su primera opción; en las siguientes opciones lee únicamente la opción, para agilizar el test.",
   question_intro_enabled:
@@ -71,10 +68,8 @@ type SettingsPageProps = {
   error: string | null;
   saved: boolean;
   diagnostics?: ReactNode;
-  /** Catálogo de voces disponibles (navegador + backend) para el selector. */
+  /** Catálogo de voces de backend (Piper/Kokoro) para el selector. */
   ttsVoices?: Voice[];
-  /** Falso si el navegador no expone ninguna voz en este dispositivo. */
-  ttsBrowserSupported?: boolean;
   onSave: (preferences: MiraLinkPreferences) => Promise<boolean> | boolean;
   onReturnToForm?: () => void;
 };
@@ -132,7 +127,6 @@ export function SettingsPage({
   saved,
   diagnostics,
   ttsVoices = [],
-  ttsBrowserSupported = true,
   onSave,
   onReturnToForm,
 }: SettingsPageProps) {
@@ -156,7 +150,7 @@ export function SettingsPage({
     });
   };
 
-  // Voces agrupadas por motor para el desplegable (Navegador / Piper / …).
+  // Voces agrupadas por motor para el desplegable (Piper / Kokoro / …).
   const voicesByEngine = useMemo(() => {
     const groups = new Map<string, Voice[]>();
     for (const voice of ttsVoices) {
@@ -503,32 +497,6 @@ export function SettingsPage({
                 </select>
               </label>
 
-              <label className="setting-control setting-control--select">
-                <span className="setting-control__label">
-                  Voz de preguntas personalizadas
-                  <SettingTooltip
-                    label="Voz de preguntas personalizadas"
-                    text={TOOLTIPS.custom_question_voice}
-                  />
-                </span>
-                <select
-                  aria-label="Voz de preguntas personalizadas"
-                  value={draft.custom_question_voice_id}
-                  onChange={(event) => update("custom_question_voice_id", event.target.value)}
-                >
-                  <option value="">Igual que la encuesta</option>
-                  {Array.from(voicesByEngine.entries()).map(([engine, voices]) => (
-                    <optgroup key={engine} label={ENGINE_LABELS[engine] ?? engine}>
-                      {voices.map((voice) => (
-                        <option key={voice.id} value={voice.id}>
-                          {voice.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
-
               <RangeSetting
                 label="Velocidad de voz"
                 value={draft.tts_rate}
@@ -555,13 +523,6 @@ export function SettingsPage({
                   onChange={(event) => update("tts_read_question_once", event.target.checked)}
                 />
               </label>
-
-              {!ttsBrowserSupported ? (
-                <p className="inline-message inline-message--error">
-                  La voz del navegador no está disponible en este dispositivo.
-                  Elige una voz de backend (Piper) o instala voces del sistema.
-                </p>
-              ) : null}
             </>
           ) : null}
         </div>

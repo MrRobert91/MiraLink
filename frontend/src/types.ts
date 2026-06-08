@@ -76,13 +76,12 @@ export type RawGazeMappingOptions = {
   invertVertical: boolean;
 };
 
-export type TtsEngineName = "browser" | "piper" | "kokoro";
+export type TtsEngineName = "piper" | "kokoro";
 
 /**
- * Una voz disponible para lectura en voz alta. Las voces de navegador se
- * descubren en runtime con `speechSynthesis.getVoices()`; las de backend
- * (piper, kokoro, …) llegan del catálogo `GET /api/tts/voices`. El `id` de las
- * voces de backend viene cualificado por motor, p. ej. "piper:es_ES-davefx-medium".
+ * Una voz disponible para lectura en voz alta. Las voces de backend (piper,
+ * kokoro, …) llegan del catálogo `GET /api/tts/voices`. El `id` viene cualificado
+ * por motor, p. ej. "piper:es_ES-davefx-medium".
  */
 export type Voice = {
   id: string;
@@ -252,7 +251,7 @@ export type MiraLinkPreferences = {
   eye_rest_trigger_seconds: number;
   eye_rest_pause_seconds: number;
   tts_enabled: boolean;
-  /** Vacío = voz automática. "browser:<nombre>" o "<engine>:<voiceId>". */
+  /** Vacío = voz automática (voz Piper por defecto). "<engine>:<voiceId>". */
   tts_voice_id: string;
   tts_rate: number;
   /** Lee el enunciado solo en la 1ª opción; el resto solo la opción. */
@@ -270,8 +269,6 @@ export type MiraLinkPreferences = {
   selection_sound_no: string;
   /** Segundos de bloqueo de lectura cuando la voz está desactivada (0 = off). */
   reading_lock_seconds: number;
-  /** Voz para preguntas personalizadas. Vacío = igual que la encuesta. */
-  custom_question_voice_id: string;
 };
 
 export type AnswerLabelMode = "si_no" | "true_false";
@@ -305,7 +302,6 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   selection_sound_yes: "chime-up",
   selection_sound_no: "chime-down",
   reading_lock_seconds: 4,
-  custom_question_voice_id: "",
 };
 
 export type MiraLinkProfile = {

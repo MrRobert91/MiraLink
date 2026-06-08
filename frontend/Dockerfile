@@ -8,6 +8,7 @@ COPY tsconfig.json tsconfig.json
 COPY tsconfig.app.json tsconfig.app.json
 COPY vite.config.ts vite.config.ts
 COPY index.html index.html
+COPY public ./public
 COPY src ./src
 
 RUN npm ci
