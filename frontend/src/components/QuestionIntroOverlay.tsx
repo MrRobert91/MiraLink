@@ -24,14 +24,33 @@ export function questionTypeLabel(type: FormQuestion["type"]): string {
 
 /**
  * Texto de la pantalla explicativa, compartido entre la vista y la locución.
- * Ej.: "Pregunta 2, respuesta única, respuestas posibles: Sí, No."
+ * Lee el título de la pregunta, su tipo y todas las respuestas posibles.
+ * Ej.: "Pregunta 2: ¿Tienes alergias? Respuesta única. Respuestas posibles: Sí, No."
  */
 export function questionIntroSpeechText(
   question: FormQuestion,
   questionIndex: number,
 ): string {
   const options = question.options.map((option) => option.label).join(", ");
-  return `Pregunta ${questionIndex + 1}, ${questionTypeLabel(question.type)}, respuestas posibles: ${options}.`;
+  return `Pregunta ${questionIndex + 1}: ${question.title}. ${questionTypeLabel(question.type)}. Respuestas posibles: ${options}.`;
+}
+
+/**
+ * Clase de la lista de opciones según su número: a partir de 5 se reparten en
+ * dos columnas y, por tramos, se reduce el tamaño de letra para que siempre
+ * encajen en pantalla sin scroll.
+ */
+function optionsClassName(count: number): string {
+  const classes = ["question-intro__options"];
+  if (count >= 5) {
+    classes.push("question-intro__options--two-col");
+  }
+  if (count >= 9) {
+    classes.push("question-intro__options--xs");
+  } else if (count >= 7) {
+    classes.push("question-intro__options--sm");
+  }
+  return classes.join(" ");
 }
 
 export function QuestionIntroOverlay({
@@ -65,7 +84,7 @@ export function QuestionIntroOverlay({
         <p className="question-intro__type">{questionTypeLabel(question.type)}</p>
         <h2 className="question-intro__title">{question.title}</h2>
         <p className="question-intro__lead">Respuestas posibles:</p>
-        <ul className="question-intro__options">
+        <ul className={optionsClassName(question.options.length)}>
           {question.options.map((option) => (
             <li key={option.id}>{option.label}</li>
           ))}

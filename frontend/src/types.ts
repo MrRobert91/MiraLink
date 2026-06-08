@@ -302,8 +302,8 @@ export const defaultMiraLinkPreferences: MiraLinkPreferences = {
   question_intro_seconds: 6,
   answer_labels: "si_no",
   selection_sound_enabled: false,
-  selection_sound_yes: "",
-  selection_sound_no: "",
+  selection_sound_yes: "chime-up",
+  selection_sound_no: "chime-down",
   reading_lock_seconds: 4,
   custom_question_voice_id: "",
 };

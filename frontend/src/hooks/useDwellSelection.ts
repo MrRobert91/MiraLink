@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { advanceDwell, type FocusableTarget, resolveFocusTarget } from "../lib/selection";
 import type { GazePoint } from "../types";
@@ -102,20 +102,31 @@ export function useDwellSelection({
     });
   }, [dwellMs, gazePoint, onActivate, resolveTargetId, snapRadius]);
 
-  return {
-    focusedKeyId,
-    dwellProgress: progress,
-    registerTarget: (id: string) => (element: HTMLElement | null) => {
+  // Memoizados con dependencias estables (refs/setters) para que su identidad no
+  // cambie en cada render. Esto evita que callbacks que dependen de `resetDwell`
+  // (p. ej. `startCalibrationPoints`) cambien en cada frame de mirada y reinicien
+  // efectos como la cuenta atrás de calibración.
+  const registerTarget = useCallback(
+    (id: string) => (element: HTMLElement | null) => {
       if (element) {
         targetsRef.current.set(id, element);
       } else {
         targetsRef.current.delete(id);
       }
     },
-    resetDwell: () => {
-      setFocusedKeyId(null);
-      setProgress(0);
-      previousTimestampRef.current = null;
-    },
+    [],
+  );
+
+  const resetDwell = useCallback(() => {
+    setFocusedKeyId(null);
+    setProgress(0);
+    previousTimestampRef.current = null;
+  }, []);
+
+  return {
+    focusedKeyId,
+    dwellProgress: progress,
+    registerTarget,
+    resetDwell,
   };
 }

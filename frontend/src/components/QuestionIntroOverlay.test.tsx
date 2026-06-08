@@ -30,15 +30,15 @@ const checkboxQuestion: FormQuestion = {
 };
 
 describe("questionIntroSpeechText", () => {
-  it("anuncia número, tipo único y opciones", () => {
+  it("anuncia número, título, tipo único y opciones", () => {
     expect(questionIntroSpeechText(radioQuestion, 0)).toBe(
-      "Pregunta 1, respuesta única, respuestas posibles: Café, Té.",
+      "Pregunta 1: ¿Prefieres café o té?. respuesta única. Respuestas posibles: Café, Té.",
     );
   });
 
-  it("anuncia tipo múltiple", () => {
+  it("anuncia título y tipo múltiple", () => {
     expect(questionIntroSpeechText(checkboxQuestion, 7)).toBe(
-      "Pregunta 8, respuesta múltiple, respuestas posibles: Pan, Fruta, Yogur.",
+      "Pregunta 8: ¿Prefieres café o té?. respuesta múltiple. Respuestas posibles: Pan, Fruta, Yogur.",
     );
   });
 

@@ -621,18 +621,23 @@ a:focus-visible {
   display: grid;
   place-content: center;
   gap: 10px;
+  padding: clamp(12px, 2vw, 28px);
   border-radius: 32px;
   border: 3px solid transparent;
   cursor: pointer;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
+/* El tope se reduce para que la etiqueta más larga ("VERDADERO") quepa entera
+   dentro de la zona sin recortarse, manteniéndola grande para Sí/No. */
 .decision-zone span:first-child {
-  font-size: clamp(4rem, 10vw, 10rem);
-  line-height: 0.85;
+  max-width: 100%;
+  font-size: clamp(2.5rem, 6vw, 7rem);
+  line-height: 0.9;
   font-weight: 800;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.06em;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .decision-zone small {
@@ -2007,6 +2012,8 @@ input[type="range"] {
 
 .question-intro {
   width: min(900px, 100%);
+  max-height: 100vh;
+  overflow: hidden;
   display: grid;
   gap: clamp(12px, 2.4vh, 24px);
   text-align: center;
@@ -2048,6 +2055,12 @@ input[type="range"] {
   width: min(560px, 100%);
 }
 
+/* Muchas respuestas: dos columnas para que quepan a lo alto. */
+.question-intro__options--two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(820px, 100%);
+}
+
 .question-intro__options li {
   padding: clamp(10px, 1.6vh, 16px) clamp(14px, 2vw, 22px);
   border: 1px solid var(--border);
@@ -2055,6 +2068,18 @@ input[type="range"] {
   background: var(--surface-2, var(--bg));
   font-size: clamp(1.1rem, 2vw, 1.5rem);
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Reducción de letra por tramos para que siempre encajen sin scroll. */
+.question-intro__options--sm li {
+  font-size: clamp(0.95rem, 1.6vw, 1.2rem);
+  padding: clamp(8px, 1.2vh, 12px) clamp(12px, 1.6vw, 18px);
+}
+
+.question-intro__options--xs li {
+  font-size: clamp(0.8rem, 1.3vw, 1rem);
+  padding: clamp(6px, 1vh, 10px) clamp(10px, 1.4vw, 14px);
 }
 
 .question-intro__hint {

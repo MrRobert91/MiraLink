@@ -38,34 +38,37 @@ export function useSelectionSound({ enabled, yesSoundId, noSoundId }: UseSelecti
     if (!enabled) {
       return;
     }
-    let unlocked = false;
-    const unlock = () => {
-      if (unlocked) {
-        return;
-      }
-      unlocked = true;
-      for (const audio of [yesAudioRef.current, noAudioRef.current]) {
-        if (!audio) {
-          continue;
-        }
-        void audio
-          .play()
-          .then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-          })
-          .catch(() => {
-            // Si aún no se permite reproducir, se reintentará en el próximo gesto.
-            unlocked = false;
-          });
-      }
-      if (unlocked) {
-        removeListeners();
-      }
-    };
+    let primed = false;
     const removeListeners = () => {
       document.removeEventListener("pointerdown", unlock);
       document.removeEventListener("keydown", unlock);
+    };
+    const unlock = () => {
+      if (primed) {
+        return;
+      }
+      const targets = [yesAudioRef.current, noAudioRef.current].filter(
+        (audio): audio is HTMLAudioElement => audio !== null,
+      );
+      if (targets.length === 0) {
+        return;
+      }
+      // Solo se considera desbloqueado (y se quitan los listeners) cuando un
+      // priming se confirma realmente. Si la primera reproducción se rechaza, se
+      // reintenta en el siguiente gesto en lugar de quedar sin desbloquear.
+      void Promise.allSettled(
+        targets.map((audio) =>
+          audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+          }),
+        ),
+      ).then((results) => {
+        if (results.some((result) => result.status === "fulfilled")) {
+          primed = true;
+          removeListeners();
+        }
+      });
     };
     document.addEventListener("pointerdown", unlock);
     document.addEventListener("keydown", unlock);

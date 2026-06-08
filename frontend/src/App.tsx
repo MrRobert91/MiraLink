@@ -323,9 +323,15 @@ export default function App() {
   const answerLabels = getAnswerLabels(answerLabelsMode);
 
   const ttsVoices = useTtsVoices();
+  // Espejo en ref del mapa de audios. Se lee desde `getAudioUrl` para que su
+  // identidad sea estable: así cachear un audio (setTtsAudioUrls) no cambia
+  // `speakText`/`speakIntro` ni reinicia los efectos de locución (que cancelarían
+  // el audio recién iniciado).
+  const ttsAudioUrlsRef = useRef(ttsAudioUrls);
+  ttsAudioUrlsRef.current = ttsAudioUrls;
   const getAudioUrl = useCallback(
-    (text: string) => ttsAudioUrls[text] ?? null,
-    [ttsAudioUrls],
+    (text: string) => ttsAudioUrlsRef.current[text] ?? null,
+    [],
   );
   // Pulso visual "ya puedes responder": se incrementa al desbloquear la lectura
   // (sin voz) o al terminar la locución de una pregunta (con voz).
@@ -994,6 +1000,12 @@ export default function App() {
     resetDwell();
   }, [appendCalibrationLog, resetDwell]);
 
+  // Espejo en ref para que el efecto de la cuenta atrás no dependa de la
+  // identidad de `startCalibrationPoints` (que cambiaría el temporizador antes
+  // de tiempo). El efecto depende solo de `calibrationCountdown`.
+  const startCalibrationPointsRef = useRef(startCalibrationPoints);
+  startCalibrationPointsRef.current = startCalibrationPoints;
+
   // "Comenzar" lanza una cuenta atrás visual (3,2,1) antes de los puntos, para
   // dar tiempo a fijar la mirada al frente.
   const handleBeginCalibration = useCallback(() => {
@@ -1011,14 +1023,14 @@ export default function App() {
     }
     if (calibrationCountdown <= 0) {
       setCalibrationCountdown(null);
-      startCalibrationPoints();
+      startCalibrationPointsRef.current();
       return;
     }
     const timeout = window.setTimeout(() => {
       setCalibrationCountdown((value) => (value === null ? null : value - 1));
     }, 1000);
     return () => window.clearTimeout(timeout);
-  }, [calibrationCountdown, startCalibrationPoints]);
+  }, [calibrationCountdown]);
 
   useEffect(() => {
     if (!calibrationActive) {
@@ -1679,6 +1691,7 @@ export default function App() {
 
       {displayPoint &&
       immersive &&
+      !calibrationInstructionsOpen &&
       eyeRestPhase !== "resting" &&
       questionIntroPhase !== "showing" &&
       calibrationCountdown === null &&

@@ -147,9 +147,12 @@ export function SettingsPage({
     }
     previewAudioRef.current?.pause();
     const audio = new Audio(sound.src);
+    audio.currentTime = 0;
     previewAudioRef.current = audio;
-    void audio.play().catch(() => {
-      // Reproducción bloqueada por el navegador: ignorar.
+    void audio.play().catch((err) => {
+      // Si el navegador bloquea la reproducción o el fichero no carga, lo
+      // dejamos visible en consola para poder diagnosticarlo.
+      console.warn(`[SelectionSound] No se pudo reproducir ${sound.src}:`, err);
     });
   };
 
