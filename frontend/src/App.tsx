@@ -10,7 +10,11 @@ import { CalibrationInstructions, calibrationSpeechText } from "./components/Cal
 import { CalibrationOverlay } from "./components/CalibrationOverlay";
 import { EyeRestOverlay, eyeRestPromptText } from "./components/EyeRestOverlay";
 import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
-import { QuestionIntroOverlay, questionIntroSpeechText } from "./components/QuestionIntroOverlay";
+import {
+  QuestionIntroOverlay,
+  questionIntroSpeechText,
+  estimateIntroSpeechMs,
+} from "./components/QuestionIntroOverlay";
 import { PauseOverlay } from "./components/PauseOverlay";
 import { TtsPreparingOverlay } from "./components/TtsPreparingOverlay";
 import { CalibrationCountdown } from "./components/CalibrationCountdown";
@@ -1589,9 +1593,15 @@ export default function App() {
           totalQuestions={activeStep.totalQuestions}
           // Sin voz se cierra tras los segundos configurados. Con voz, el cierre
           // normal lo dispara el fin de la locución (onEnd); el temporizador actúa
-          // solo como red de seguridad (+15s) por si la voz falla y onEnd no llega,
-          // para que la pantalla no se quede bloqueada.
-          durationMs={questionIntroSeconds * 1000 + (ttsEnabled ? 15000 : 0)}
+          // solo como red de seguridad por si la voz falla y onEnd no llega, para
+          // que la pantalla no se quede bloqueada. Esa red escala con la longitud
+          // de la locución (crece con el número de respuestas) para no cortar la
+          // lectura de las opciones antes de tiempo.
+          durationMs={
+            ttsEnabled
+              ? estimateIntroSpeechMs(activeQuestion, activeStep.questionIndex, ttsRate)
+              : questionIntroSeconds * 1000
+          }
           toolbar={answeringToolbar}
           onComplete={handleQuestionIntroComplete}
         />

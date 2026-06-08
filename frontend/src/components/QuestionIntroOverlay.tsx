@@ -36,6 +36,29 @@ export function questionIntroSpeechText(
 }
 
 /**
+ * Estimación holgada (ms) de cuánto dura la locución de la pantalla explicativa.
+ * Se usa como red de seguridad del temporizador con voz: el cierre normal lo
+ * dispara el fin de la locución (onEnd), pero si esta nunca llega (audio colgado)
+ * el temporizador cierra la pantalla. Por eso la estimación debe superar SIEMPRE
+ * a la locución real, que crece con el número de respuestas: si se quedara corta
+ * (como ocurría con un valor fijo) cortaría la lectura de las opciones y saltaría
+ * a responder antes de tiempo.
+ */
+export function estimateIntroSpeechMs(
+  question: FormQuestion,
+  questionIndex: number,
+  rate: number,
+): number {
+  const text = questionIntroSpeechText(question, questionIndex);
+  // ~9 caracteres/segundo es deliberadamente lento (Piper lee más rápido) para
+  // que la estimación quede por encima de la locución real; se ajusta por la
+  // velocidad de lectura y se añade un margen fijo generoso.
+  const charsPerSecond = 9 * Math.max(rate, 0.1);
+  const speechMs = (text.length / charsPerSecond) * 1000;
+  return Math.round(speechMs + 8000);
+}
+
+/**
  * Clase de la lista de opciones según su número: por tramos se reparten en dos
  * o tres columnas y se reduce el tamaño de letra para que siempre encajen en
  * pantalla sin scroll.

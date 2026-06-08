@@ -5,6 +5,7 @@ import {
   QuestionIntroOverlay,
   questionIntroSpeechText,
   questionTypeLabel,
+  estimateIntroSpeechMs,
 } from "./QuestionIntroOverlay";
 import type { FormQuestion } from "../types";
 
@@ -45,6 +46,34 @@ describe("questionIntroSpeechText", () => {
   it("etiqueta el tipo correctamente", () => {
     expect(questionTypeLabel("radio")).toBe("respuesta única");
     expect(questionTypeLabel("checkbox")).toBe("respuesta múltiple");
+  });
+});
+
+describe("estimateIntroSpeechMs", () => {
+  const manyOptionsQuestion: FormQuestion = {
+    ...radioQuestion,
+    options: Array.from({ length: 15 }, (_, i) => ({
+      id: `o${i}`,
+      label: `Respuesta número ${i + 1} con texto largo`,
+    })),
+  };
+
+  it("crece con el número de respuestas para no cortar la locución", () => {
+    const few = estimateIntroSpeechMs(radioQuestion, 0, 1);
+    const many = estimateIntroSpeechMs(manyOptionsQuestion, 0, 1);
+    expect(many).toBeGreaterThan(few);
+  });
+
+  it("siempre añade margen sobre la locución estimada", () => {
+    // Con pocas opciones, el margen fijo domina y queda muy por encima del
+    // antiguo valor fijo insuficiente para listas largas.
+    expect(estimateIntroSpeechMs(radioQuestion, 0, 1)).toBeGreaterThan(8000);
+  });
+
+  it("alarga la red de seguridad cuando la lectura es más lenta", () => {
+    const fast = estimateIntroSpeechMs(manyOptionsQuestion, 0, 1.5);
+    const slow = estimateIntroSpeechMs(manyOptionsQuestion, 0, 0.75);
+    expect(slow).toBeGreaterThan(fast);
   });
 });
 
