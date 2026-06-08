@@ -36,18 +36,20 @@ export function questionIntroSpeechText(
 }
 
 /**
- * Clase de la lista de opciones según su número: a partir de 5 se reparten en
- * dos columnas y, por tramos, se reduce el tamaño de letra para que siempre
- * encajen en pantalla sin scroll.
+ * Clase de la lista de opciones según su número: por tramos se reparten en dos
+ * o tres columnas y se reduce el tamaño de letra para que siempre encajen en
+ * pantalla sin scroll.
  */
 function optionsClassName(count: number): string {
   const classes = ["question-intro__options"];
-  if (count >= 5) {
+  if (count >= 10) {
+    classes.push("question-intro__options--three-col");
+  } else if (count >= 5) {
     classes.push("question-intro__options--two-col");
   }
-  if (count >= 9) {
+  if (count >= 13) {
     classes.push("question-intro__options--xs");
-  } else if (count >= 7) {
+  } else if (count >= 9) {
     classes.push("question-intro__options--sm");
   }
   return classes.join(" ");

@@ -444,19 +444,30 @@ export default function App() {
       : `${step.questionTitle}. ${step.optionLabel}`;
 
   // Genera/reutiliza los audios (Piper) del formulario al cargarlo (generación
-  // anticipada). Si la preparación falla, no se leerá nada (silencio).
+  // anticipada). Se generan en UN solo lote por `form_id` (el backend poda del
+  // formulario lo que no esté en el lote) todos los textos posibles: ambos modos
+  // de "leer el enunciado solo una vez" (combinado "enunciado. opción" y opción
+  // suelta) y el texto de cada pantalla explicativa. Así cambiar el ajuste en
+  // caliente o abrir una intro no requiere nueva síntesis. Si falla, silencio.
   const prepareTtsForForm = useCallback(
     async (form: ImportedForm) => {
       if (!ttsEnabled) {
         setTtsAudioUrls({});
         return;
       }
-      const texts = Array.from(new Set(buildDecisionSteps(form).map(stepSpeechText)));
+      const texts = new Set<string>();
+      for (const step of buildDecisionSteps(form)) {
+        texts.add(`${step.questionTitle}. ${step.optionLabel}`);
+        texts.add(step.optionLabel);
+      }
+      form.questions.forEach((question, questionIndex) => {
+        texts.add(questionIntroSpeechText(question, questionIndex));
+      });
       try {
         const urls = await prepareFormAudio(
           form.form_id,
           resolveVoiceId(ttsVoiceId),
-          texts.map((text) => ({ key: text, text })),
+          Array.from(texts, (text) => ({ key: text, text })),
         );
         setTtsAudioUrls(urls);
       } catch {
@@ -464,8 +475,7 @@ export default function App() {
         setTtsAudioUrls({});
       }
     },
-    // `stepSpeechText` depende de `ttsReadQuestionOnce`; debe regenerar las claves.
-    [ttsEnabled, ttsVoiceId, ttsReadQuestionOnce],
+    [ttsEnabled, ttsVoiceId],
   );
 
   // Lee la pregunta + opción activas al cambiar de paso mientras se responde.
@@ -579,7 +589,9 @@ export default function App() {
     let silentTimer: number | undefined;
     const text = questionIntroSpeechText(activeQuestion, activeStep?.questionIndex ?? 0);
     void (async () => {
-      const url = await prepareAudioUrl(text, ttsVoiceId, "question-intro");
+      // El audio suele estar pre-generado al cargar el formulario (instantáneo);
+      // solo se sintetiza al vuelo como fallback (TTS activado tras la carga).
+      const url = getAudioUrl(text) ?? (await prepareAudioUrl(text, ttsVoiceId, "question-intro"));
       if (cancelled) {
         return;
       }
@@ -610,6 +622,7 @@ export default function App() {
     customQuestionPhase,
     ttsVoiceId,
     questionIntroSeconds,
+    getAudioUrl,
     prepareAudioUrl,
     speakIntro,
     cancelIntroSpeech,
@@ -855,7 +868,6 @@ export default function App() {
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       dispatchFormFlow({ type: "openCalibrationChoice" });
       resetDwell();
-      void prepareTtsForForm(importedForm);
       setStatusMessage(`Formulario importado: ${importedForm.title}.`);
       try {
         const updated = await saveForm({ form_id: importedForm.form_id, form_title: importedForm.title, form_url: trimmedUrl, provider: importedForm.provider });
@@ -869,7 +881,7 @@ export default function App() {
     } finally {
       setImportingForm(false);
     }
-  }, [formUrl, resetDwell, prepareTtsForForm]);
+  }, [formUrl, resetDwell]);
 
   useEffect(() => {
     let cancelled = false;
@@ -900,7 +912,6 @@ export default function App() {
       dispatchFormFlow({ type: "loadForm", form: importedForm });
       dispatchFormFlow({ type: "openCalibrationChoice" });
       resetDwell();
-      void prepareTtsForForm(importedForm);
       setStatusMessage(`Formulario cargado: ${importedForm.title}.`);
       try {
         const updated = await saveForm({ form_id: importedForm.form_id, form_title: importedForm.title, form_url: url, provider: importedForm.provider });
@@ -914,7 +925,16 @@ export default function App() {
     } finally {
       setImportingForm(false);
     }
-  }, [resetDwell, prepareTtsForForm]);
+  }, [resetDwell]);
+
+  // Pre-genera (o regenera) los audios del formulario cargado. Se dispara al
+  // cargar un formulario y al cambiar la voz o activar/desactivar la lectura
+  // desde el navbar, para que el cambio se aplique en caliente sin silencios.
+  useEffect(() => {
+    if (formFlow.form) {
+      void prepareTtsForForm(formFlow.form);
+    }
+  }, [formFlow.form, prepareTtsForForm]);
 
   const handleDeleteSavedForm = useCallback(async (url: string) => {
     try {
