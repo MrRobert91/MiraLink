@@ -165,12 +165,18 @@ export async function prepareFormAudio(
   formId: string,
   voiceId: string,
   items: TtsPrepareItem[],
+  options?: { prune?: boolean },
 ): Promise<Record<string, string>> {
   const base = resolveApiBaseUrl();
   const response = await fetch(buildApiUrl(base, "/api/tts/prepare"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ form_id: formId, voice_id: voiceId, items }),
+    body: JSON.stringify({
+      form_id: formId,
+      voice_id: voiceId,
+      items,
+      prune: options?.prune ?? true,
+    }),
   });
   const data = await parseJson<{ voice_id: string; items: Record<string, string> }>(response);
   const absolute: Record<string, string> = {};

@@ -2111,6 +2111,73 @@ input[type="range"] {
   margin-top: clamp(6px, 1.5vh, 14px);
 }
 
+/* Preparando audios: bloqueo a pantalla completa hasta que la pre-generación
+   de la voz Piper termina, para que las pantallas explicativas suenen al vuelo. */
+.tts-preparing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 98;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+}
+
+.tts-preparing {
+  width: min(520px, 100%);
+  display: grid;
+  gap: clamp(12px, 2.4vh, 22px);
+  place-items: center;
+  text-align: center;
+  padding: clamp(24px, 4vw, 48px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.tts-preparing__label {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.tts-preparing__bar {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--surface-2, var(--bg));
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.tts-preparing__bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--accent);
+  transition: transform 0.2s ease;
+}
+
+.tts-preparing__count {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+}
+
+.tts-preparing__hint {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+}
+
 /* Pausa manual: pantalla a pantalla completa que solo se quita con el ratón. */
 .pause-overlay {
   position: fixed;

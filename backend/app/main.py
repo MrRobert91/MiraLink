@@ -69,6 +69,8 @@ class TtsPrepareRequest(BaseModel):
     form_id: str
     voice_id: str
     items: list[TtsPrepareItem]
+    # False permite trocear la pre-generación sin que cada lote pode los anteriores.
+    prune: bool = True
 
 
 class TtsPrepareResponse(BaseModel):
@@ -273,6 +275,7 @@ def create_app(
                 payload.form_id,
                 payload.voice_id,
                 [(item.key, item.text) for item in payload.items],
+                prune=payload.prune,
             )
         except TtsError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

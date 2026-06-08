@@ -12,6 +12,7 @@ import { EyeRestOverlay, eyeRestPromptText } from "./components/EyeRestOverlay";
 import { CustomQuestionOverlay } from "./components/CustomQuestionOverlay";
 import { QuestionIntroOverlay, questionIntroSpeechText } from "./components/QuestionIntroOverlay";
 import { PauseOverlay } from "./components/PauseOverlay";
+import { TtsPreparingOverlay } from "./components/TtsPreparingOverlay";
 import { CalibrationCountdown } from "./components/CalibrationCountdown";
 import { AdminPanel } from "./components/AdminPanel";
 import { FormImportPanel } from "./components/FormImportPanel";
@@ -152,6 +153,17 @@ export default function App() {
   const [customQuestionLoading, setCustomQuestionLoading] = useState(false);
   // Mapa texto -> URL de audio preparada para voces de backend (Piper, …).
   const [ttsAudioUrls, setTtsAudioUrls] = useState<Record<string, string>>({});
+  // Estado de la pre-generación de audios del formulario (voz Piper). Sirve para
+  // bloquear el inicio de la respuesta con una pantalla "Preparando audios…"
+  // hasta que estén todos listos, evitando que las pantallas explicativas tarden.
+  const [ttsPrep, setTtsPrep] = useState<{
+    status: "idle" | "preparing" | "ready" | "error";
+    done: number;
+    total: number;
+  }>({ status: "idle", done: 0, total: 0 });
+  // El usuario pulsó "Empezar formulario" pero la pre-generación aún no terminó:
+  // se entra a responder en cuanto deje de estar "preparing".
+  const [pendingStart, setPendingStart] = useState(false);
   const [customQuestionPhase, setCustomQuestionPhase] = useState<"idle" | "compose" | "asking">("idle");
   const [customQuestionText, setCustomQuestionText] = useState("");
   const [auxiliaryAnswers, setAuxiliaryAnswers] = useState<{ question: string; answer: "Sí" | "No" }[]>([]);
@@ -453,26 +465,45 @@ export default function App() {
     async (form: ImportedForm) => {
       if (!ttsEnabled) {
         setTtsAudioUrls({});
+        setTtsPrep({ status: "ready", done: 0, total: 0 });
         return;
       }
-      const texts = new Set<string>();
+      const textSet = new Set<string>();
       for (const step of buildDecisionSteps(form)) {
-        texts.add(`${step.questionTitle}. ${step.optionLabel}`);
-        texts.add(step.optionLabel);
+        textSet.add(`${step.questionTitle}. ${step.optionLabel}`);
+        textSet.add(step.optionLabel);
       }
       form.questions.forEach((question, questionIndex) => {
-        texts.add(questionIntroSpeechText(question, questionIndex));
+        textSet.add(questionIntroSpeechText(question, questionIndex));
       });
+      const texts = Array.from(textSet);
+      const total = texts.length;
+      const voice = resolveVoiceId(ttsVoiceId);
+      setTtsPrep({ status: "preparing", done: 0, total });
+      // Se trocea para poder mostrar progreso; `prune:false` evita que cada lote
+      // borre los audios de los anteriores (mismo form_id). La síntesis Piper es
+      // secuencial en el backend, así que el coste total es similar al de un lote.
+      const CHUNK = 4;
+      const merged: Record<string, string> = {};
       try {
-        const urls = await prepareFormAudio(
-          form.form_id,
-          resolveVoiceId(ttsVoiceId),
-          Array.from(texts, (text) => ({ key: text, text })),
-        );
-        setTtsAudioUrls(urls);
+        for (let i = 0; i < texts.length; i += CHUNK) {
+          const chunk = texts.slice(i, i + CHUNK);
+          const urls = await prepareFormAudio(
+            form.form_id,
+            voice,
+            chunk.map((text) => ({ key: text, text })),
+            { prune: false },
+          );
+          Object.assign(merged, urls);
+          setTtsAudioUrls((previous) => ({ ...previous, ...urls }));
+          setTtsPrep({ status: "preparing", done: Math.min(i + CHUNK, total), total });
+        }
+        setTtsPrep({ status: "ready", done: total, total });
       } catch {
-        // Si la preparación falla, no se lee (silencio + aviso visual).
-        setTtsAudioUrls({});
+        // Si falla la red, conservamos lo ya generado y desbloqueamos (silencio
+        // en los textos que falten).
+        setTtsAudioUrls((previous) => ({ ...previous, ...merged }));
+        setTtsPrep({ status: "error", done: Object.keys(merged).length, total });
       }
     },
     [ttsEnabled, ttsVoiceId],
@@ -935,6 +966,23 @@ export default function App() {
       void prepareTtsForForm(formFlow.form);
     }
   }, [formFlow.form, prepareTtsForForm]);
+
+  // Inicia la respuesta. Si la voz está activada y la pre-generación sigue en
+  // curso, espera (pantalla "Preparando audios…") y entra en cuanto termine.
+  const handleStartAnswering = useCallback(() => {
+    if (ttsEnabled && ttsPrep.status === "preparing") {
+      setPendingStart(true);
+      return;
+    }
+    dispatchFormFlow({ type: "startAnswering" });
+  }, [ttsEnabled, ttsPrep.status]);
+
+  useEffect(() => {
+    if (pendingStart && ttsPrep.status !== "preparing") {
+      setPendingStart(false);
+      dispatchFormFlow({ type: "startAnswering" });
+    }
+  }, [pendingStart, ttsPrep.status]);
 
   const handleDeleteSavedForm = useCallback(async (url: string) => {
     try {
@@ -1549,6 +1597,8 @@ export default function App() {
         />
       ) : null}
 
+      {pendingStart ? <TtsPreparingOverlay done={ttsPrep.done} total={ttsPrep.total} /> : null}
+
       {paused ? <PauseOverlay onResume={handleResume} /> : null}
 
       {!immersive ? <AppNavigation onHome={handleResetForm} /> : null}
@@ -1658,7 +1708,7 @@ export default function App() {
                     <button
                       type="button"
                       className="primary-button"
-                      onClick={() => dispatchFormFlow({ type: "startAnswering" })}
+                      onClick={handleStartAnswering}
                     >
                       {formFlow.currentStepIndex > 0 ? "Continuar formulario" : "Empezar formulario"}
                     </button>

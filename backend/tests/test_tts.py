@@ -75,6 +75,36 @@ def test_prepare_prunes_audio_when_form_questions_change(tmp_path):
     assert service.resolve_audio("form-1", "fake:v1", text_hash("Pregunta nueva")) is not None
 
 
+def test_prepare_with_prune_false_keeps_previous_audios(tmp_path):
+    engine = FakeEngine()
+    service = _service(tmp_path, engine)
+
+    # Pre-generación troceada: cada lote NO debe podar los audios del anterior.
+    service.prepare("form-1", "fake:v1", [("a", "Uno")], prune=False)
+    service.prepare("form-1", "fake:v1", [("b", "Dos")], prune=False)
+
+    assert service.resolve_audio("form-1", "fake:v1", text_hash("Uno")) is not None
+    assert service.resolve_audio("form-1", "fake:v1", text_hash("Dos")) is not None
+
+
+def test_prepare_skips_text_that_fails_without_aborting_batch(tmp_path):
+    class FlakyEngine(FakeEngine):
+        def synthesize(self, text: str, voice_id: str) -> bytes:
+            if text == "BOOM":
+                raise RuntimeError("síntesis fallida")
+            return super().synthesize(text, voice_id)
+
+    service = _service(tmp_path, FlakyEngine())
+    result = service.prepare(
+        "form-1", "fake:v1", [("ok", "Hola"), ("bad", "BOOM"), ("ok2", "Adiós")]
+    )
+
+    # El texto problemático se omite, pero el resto del lote se genera igual.
+    assert set(result) == {"ok", "ok2"}
+    assert service.resolve_audio("form-1", "fake:v1", text_hash("Hola")) is not None
+    assert service.resolve_audio("form-1", "fake:v1", text_hash("Adiós")) is not None
+
+
 def test_enforce_limits_evicts_lru_by_size(tmp_path):
     cache = TtsCache(tmp_path / "tts", tmp_path / "tts_cache.db")
     blob = b"x" * (700 * 1024)  # ~0,68 MB por audio
