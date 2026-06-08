@@ -32,7 +32,7 @@ export function FormImportPanel({ formUrl, importing, error, savedForms, onUrlCh
     <section className="form-import-panel">
       <div>
         <p className="eyebrow">Formulario</p>
-        <h2>Pega una URL publica de Google Forms o Microsoft Forms</h2>
+        <h2>Pega la URL pública de tu Microsoft Forms</h2>
         <p>
           La aplicacion importara preguntas de opcion multiple o casillas y las convertira en decisiones binarias:
           mirar izquierda para No, derecha para Si.
@@ -43,7 +43,7 @@ export function FormImportPanel({ formUrl, importing, error, savedForms, onUrlCh
           type="url"
           value={formUrl}
           onChange={(event) => onUrlChange(event.target.value)}
-          placeholder="https://docs.google.com/forms/... o https://forms.office.com/r/..."
+          placeholder="https://forms.office.com/r/..."
           aria-label="URL de formulario"
         />
         <button type="button" className="primary-button" onClick={onImport} disabled={importing || formUrl.trim().length === 0}>

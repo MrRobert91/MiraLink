@@ -301,19 +301,19 @@ a:focus-visible {
 
 /* ── Home / hero ──────────────────────────────────────────────────────────── */
 .home-page {
-  padding-top: clamp(52px, 8vw, 104px);
-  padding-bottom: 72px;
+  padding-top: clamp(20px, 3vw, 40px);
+  padding-bottom: 48px;
 }
 
 .home-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.75fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.7fr);
   align-items: center;
-  gap: clamp(32px, 8vw, 104px);
-  min-height: 390px;
+  gap: clamp(28px, 6vw, 80px);
+  min-height: 0;
+  margin-bottom: clamp(28px, 4vw, 48px);
 }
 
-.home-hero h1,
 .flow-card h1,
 .page-heading h1 {
   margin: 0;
@@ -323,17 +323,25 @@ a:focus-visible {
   letter-spacing: -0.075em;
 }
 
+.home-hero h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(2.4rem, 5vw, 4.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
 .home-hero p {
   max-width: 650px;
-  margin: 28px 0 0;
+  margin: 20px 0 0;
   color: var(--muted);
-  font-size: clamp(1.08rem, 1.7vw, 1.35rem);
-  line-height: 1.65;
+  font-size: clamp(1.02rem, 1.5vw, 1.2rem);
+  line-height: 1.55;
 }
 
 .eye-visual {
   position: relative;
-  min-height: 330px;
+  min-height: 250px;
   border-radius: 50%;
   background:
     radial-gradient(circle, var(--accent-soft), transparent 52%),
@@ -1125,9 +1133,21 @@ input[type="range"] {
 }
 
 .answering-settings-button,
-.answering-custom-question-button {
+.answering-custom-question-button,
+.answering-pause-button {
   min-height: 42px;
   padding: 9px 16px;
+}
+
+.answering-pause-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.answering-pause-button:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 .tracking-status {
@@ -1873,7 +1893,8 @@ input[type="range"] {
   }
 
   .answering-settings-button,
-  .answering-custom-question-button {
+  .answering-custom-question-button,
+  .answering-pause-button {
     padding: 8px 10px;
     font-size: 0.82rem;
   }
@@ -1996,6 +2017,14 @@ input[type="range"] {
   max-width: 32ch;
   color: var(--muted);
   font-size: clamp(1rem, 1.6vw, 1.25rem);
+}
+
+.eye-rest-resting__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: clamp(6px, 1.5vh, 16px);
 }
 
 /* Pantalla explicativa que se intercala antes de cada pregunta. */

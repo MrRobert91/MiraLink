@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DecisionZones } from "./DecisionZones";
 import { resolveBinaryDecisionTarget } from "../lib/decisionZone";
@@ -73,17 +73,27 @@ export function EyeRestOverlay({
   });
 
   const [secondsLeft, setSecondsLeft] = useState(pauseSeconds);
+  const [timerPaused, setTimerPaused] = useState(false);
+  // Marca de tiempo (epoch ms) en la que la cuenta atrás llegaría a cero.
+  const deadlineRef = useRef(0);
 
+  // Reinicia la cuenta atrás cada vez que se entra en la fase de descanso.
   useEffect(() => {
     if (phase !== "resting") {
       return;
     }
-
     setSecondsLeft(pauseSeconds);
-    const startedAt = Date.now();
+    setTimerPaused(false);
+    deadlineRef.current = Date.now() + pauseSeconds * 1000;
+  }, [phase, pauseSeconds]);
+
+  useEffect(() => {
+    if (phase !== "resting" || timerPaused) {
+      return;
+    }
+
     const interval = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-      const remaining = Math.max(pauseSeconds - elapsed, 0);
+      const remaining = Math.max(Math.round((deadlineRef.current - Date.now()) / 1000), 0);
       setSecondsLeft(remaining);
       if (remaining <= 0) {
         window.clearInterval(interval);
@@ -92,7 +102,24 @@ export function EyeRestOverlay({
     }, 250);
 
     return () => window.clearInterval(interval);
-  }, [phase, pauseSeconds, onPauseComplete]);
+  }, [phase, timerPaused, onPauseComplete]);
+
+  const handleToggleTimer = useCallback(() => {
+    setTimerPaused((prev) => {
+      if (prev) {
+        // Al reanudar, recalculamos la meta a partir del tiempo restante.
+        deadlineRef.current = Date.now() + secondsLeft * 1000;
+      }
+      return !prev;
+    });
+  }, [secondsLeft]);
+
+  const handleAddMinute = useCallback(() => {
+    setSecondsLeft((prev) => prev + 60);
+    if (!timerPaused) {
+      deadlineRef.current += 60 * 1000;
+    }
+  }, [timerPaused]);
 
   if (phase === "resting") {
     return (
@@ -103,6 +130,17 @@ export function EyeRestOverlay({
           <p className="eye-rest-resting__hint">
             Relaja la mirada. Volveremos al formulario cuando termine la cuenta atrás.
           </p>
+          <div className="eye-rest-resting__actions">
+            <button type="button" className="primary-button" onClick={onPauseComplete}>
+              Volver al test
+            </button>
+            <button type="button" className="secondary-button" onClick={handleToggleTimer}>
+              {timerPaused ? "Reanudar tiempo" : "Parar el tiempo"}
+            </button>
+            <button type="button" className="secondary-button" onClick={handleAddMinute}>
+              +1 minuto
+            </button>
+          </div>
         </div>
       </div>
     );
