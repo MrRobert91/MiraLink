@@ -3,7 +3,13 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SettingTooltip } from "./SettingTooltip";
 import { answerLabelOptions } from "../lib/answerLabels";
 import { selectionSounds } from "../lib/selectionSounds";
-import { themeOptions, type MiraLinkPreferences, type ThemeName, type Voice } from "../types";
+import {
+  defaultMiraLinkPreferences,
+  themeOptions,
+  type MiraLinkPreferences,
+  type ThemeName,
+  type Voice,
+} from "../types";
 
 const ENGINE_LABELS: Record<string, string> = {
   piper: "Piper",
@@ -191,6 +197,15 @@ export function SettingsPage({
   const cancelChanges = () => {
     setDraft(preferences);
     onReturnToForm?.();
+  };
+
+  // Restablece los valores por defecto en el borrador. No se persisten hasta que
+  // se pulsa «Guardar cambios»: al guardarlos pasan a ser la última configuración.
+  const resetToDefaults = () => {
+    setDraft((current) => ({
+      ...defaultMiraLinkPreferences,
+      language: current.language,
+    }));
   };
 
   const saveChanges = async () => {
@@ -592,6 +607,13 @@ export function SettingsPage({
         </div>
 
         <div className="settings-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={resetToDefaults}
+          >
+            Restablecer valores por defecto
+          </button>
           <button
             type="button"
             className="secondary-button"

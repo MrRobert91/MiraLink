@@ -35,7 +35,6 @@ function renderPanel(step: DecisionStep) {
       registerTarget={() => () => undefined}
       onAnswerYes={() => undefined}
       onAnswerNo={() => undefined}
-      onBack={() => undefined}
       onSubmit={() => undefined}
       onReset={() => undefined}
     />,

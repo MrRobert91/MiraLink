@@ -1640,7 +1640,6 @@ export default function App() {
                   registerTarget={registerTarget}
                   onAnswerYes={handleAnswerYes}
                   onAnswerNo={handleAnswerNo}
-                  onBack={() => dispatchFormFlow({ type: "goBack" })}
                   onSubmit={handleSubmitForm}
                   onReset={handleResetForm}
                 />
@@ -1741,7 +1740,6 @@ export default function App() {
                     registerTarget={registerTarget}
                     onAnswerYes={handleAnswerYes}
                     onAnswerNo={handleAnswerNo}
-                    onBack={() => dispatchFormFlow({ type: "goBack" })}
                     onSubmit={handleSubmitForm}
                     onReset={handleResetForm}
                   />

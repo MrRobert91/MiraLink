@@ -20,7 +20,6 @@ type BinaryFormPanelProps = {
   registerTarget: (id: string) => RefCallback<HTMLElement>;
   onAnswerYes: () => void;
   onAnswerNo: () => void;
-  onBack: () => void;
   onSubmit: () => void;
   onReset: () => void;
 };
@@ -41,7 +40,6 @@ export function BinaryFormPanel({
   registerTarget,
   onAnswerYes,
   onAnswerNo,
-  onBack,
   onSubmit,
   onReset,
 }: BinaryFormPanelProps) {
@@ -68,9 +66,6 @@ export function BinaryFormPanel({
           ))}
         </div>
         <div className="review-actions">
-          <button type="button" className="secondary-button" onClick={onBack}>
-            Volver
-          </button>
           <button type="button" className="secondary-button" onClick={onReset}>
             Nuevo formulario
           </button>
