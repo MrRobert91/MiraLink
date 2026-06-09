@@ -160,9 +160,9 @@ export function EyeRestOverlay({
           restTitle="Pausa"
           restHint="Mira al lado para decidir."
           yesLabel="Sí"
-          yesHint="Descansar un minuto"
+          yesHint="Mirada a la derecha"
           noLabel="No"
-          noHint="Seguir respondiendo"
+          noHint="Mirada a la izquierda"
           focusedTargetId={focusedKeyId}
           dwellProgress={dwellProgress}
           neutralZonePercent={neutralZonePercent}

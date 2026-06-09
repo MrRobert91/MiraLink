@@ -16,6 +16,8 @@ function baseProps(overrides: Partial<Parameters<typeof CustomQuestionOverlay>[0
     onShow: vi.fn(),
     onAnswer: vi.fn(),
     onCancel: vi.fn(),
+    onAskAnother: vi.fn(),
+    onContinueForm: vi.fn(),
     ...overrides,
   };
 }
@@ -44,5 +46,19 @@ describe("CustomQuestionOverlay", () => {
     await user.click(screen.getByRole("button", { name: /Mirada a la derecha/ }));
 
     expect(props.onAnswer).toHaveBeenCalledWith("Sí");
+  });
+
+  it("ofrece hacer otra pregunta o continuar en la fase de seguimiento", async () => {
+    const user = userEvent.setup();
+    const props = baseProps({ phase: "followup", lastAnswer: "Sí" });
+    render(<CustomQuestionOverlay {...props} />);
+
+    expect(screen.getByText(/Respuesta registrada: Sí/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hacer otra pregunta" }));
+    expect(props.onAskAnother).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Continuar formulario" }));
+    expect(props.onContinueForm).toHaveBeenCalled();
   });
 });

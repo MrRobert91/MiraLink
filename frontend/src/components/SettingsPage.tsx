@@ -44,6 +44,8 @@ const TOOLTIPS = {
     "Usa la inclinación vertical de la cabeza para ayudar a estimar la mirada. Actívalo si el eje vertical es impreciso; desactívalo si mueves mucho la cabeza.",
   invert_vertical_axis:
     "Invierte el eje vertical de la mirada. Márcalo solo si al mirar arriba el cursor baja (o viceversa).",
+  lock_vertical_axis:
+    "Fija el puntero en el centro vertical: la mirada solo lo mueve a izquierda/derecha. Útil si el eje vertical es inestable o solo se responde Sí/No.",
   camera_visible:
     "Muestra tu cámara de fondo durante la calibración para ayudarte a colocarte. Desmárcalo si prefieres una pantalla limpia.",
   eye_rest_enabled:
@@ -420,6 +422,7 @@ export function SettingsPage({
             [
               ["use_pitch_assist", "Usar pitch", TOOLTIPS.use_pitch_assist],
               ["invert_vertical_axis", "Invertir eje vertical", TOOLTIPS.invert_vertical_axis],
+              ["lock_vertical_axis", "Bloquear eje vertical", TOOLTIPS.lock_vertical_axis],
               ["camera_visible", "Mostrar cámara en calibración", TOOLTIPS.camera_visible],
               ["eye_rest_enabled", "Pausa visual de descanso", TOOLTIPS.eye_rest_enabled],
             ] as const

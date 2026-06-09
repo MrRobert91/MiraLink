@@ -56,13 +56,24 @@ export function useSelectionSound({ enabled, yesSoundId, noSoundId }: UseSelecti
       // Solo se considera desbloqueado (y se quitan los listeners) cuando un
       // priming se confirma realmente. Si la primera reproducción se rechaza, se
       // reintenta en el siguiente gesto en lugar de quedar sin desbloquear.
+      // El cebado debe ser silencioso: silenciamos cada audio durante el
+      // play→pause y restauramos su estado previo. Así el navegador se
+      // desbloquea sin que se oiga ningún sonido al primer gesto (p. ej. al
+      // pulsar "Cargar formulario").
       void Promise.allSettled(
-        targets.map((audio) =>
-          audio.play().then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-          }),
-        ),
+        targets.map((audio) => {
+          const previousMuted = audio.muted;
+          audio.muted = true;
+          return audio
+            .play()
+            .then(() => {
+              audio.pause();
+              audio.currentTime = 0;
+            })
+            .finally(() => {
+              audio.muted = previousMuted;
+            });
+        }),
       ).then((results) => {
         if (results.some((result) => result.status === "fulfilled")) {
           primed = true;

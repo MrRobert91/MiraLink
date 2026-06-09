@@ -6,7 +6,7 @@ import { useDwellSelection } from "../hooks/useDwellSelection";
 import type { FocusableTarget } from "../lib/selection";
 import type { GazePoint } from "../types";
 
-export type CustomQuestionPhase = "idle" | "compose" | "asking";
+export type CustomQuestionPhase = "idle" | "compose" | "asking" | "followup";
 
 type CustomQuestionOverlayProps = {
   phase: Exclude<CustomQuestionPhase, "idle">;
@@ -20,9 +20,15 @@ type CustomQuestionOverlayProps = {
   noLabel: string;
   /** Generando el audio de la pregunta (voz de backend) antes de mostrarla. */
   loading?: boolean;
+  /** Última respuesta registrada, para mostrarla en la pantalla de seguimiento. */
+  lastAnswer?: "Sí" | "No" | null;
   onShow: (text: string) => void;
   onAnswer: (answer: "Sí" | "No") => void;
   onCancel: () => void;
+  /** Fase "followup": el cuidador pide otra pregunta personalizada. */
+  onAskAnother: () => void;
+  /** Fase "followup": el cuidador vuelve al formulario. */
+  onContinueForm: () => void;
 };
 
 export function CustomQuestionOverlay({
@@ -35,9 +41,12 @@ export function CustomQuestionOverlay({
   yesLabel,
   noLabel,
   loading = false,
+  lastAnswer = null,
   onShow,
   onAnswer,
   onCancel,
+  onAskAnother,
+  onContinueForm,
 }: CustomQuestionOverlayProps) {
   const [draft, setDraft] = useState("");
 
@@ -99,6 +108,33 @@ export function CustomQuestionOverlay({
               onClick={() => onShow(trimmed)}
             >
               {loading ? "Generando voz..." : "Mostrar al usuario"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "followup") {
+    return (
+      <div
+        className="custom-question-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Respuesta registrada"
+      >
+        <div className="custom-question-compose">
+          <header className="custom-question-compose__header">
+            <p className="eyebrow">Pregunta auxiliar</p>
+            <h2>Respuesta registrada{lastAnswer ? `: ${lastAnswer}` : ""}</h2>
+            <p>¿Quieres hacer otra pregunta personalizada o continuar con el formulario?</p>
+          </header>
+          <div className="custom-question-compose__actions">
+            <button type="button" className="secondary-button" onClick={onAskAnother}>
+              Hacer otra pregunta
+            </button>
+            <button type="button" className="primary-button" onClick={onContinueForm}>
+              Continuar formulario
             </button>
           </div>
         </div>

@@ -18,6 +18,7 @@ class ProfilePreferences(BaseModel):
     high_contrast: bool = False
     use_pitch_assist: bool = True
     invert_vertical_axis: bool = False
+    lock_vertical_axis: bool = False
     camera_opacity: int = 35
     camera_visible: bool = True
     center_precision: int = 50
@@ -71,6 +72,7 @@ class SqliteProfileStore:
                     high_contrast INTEGER NOT NULL DEFAULT 0,
                     use_pitch_assist INTEGER NOT NULL DEFAULT 1,
                     invert_vertical_axis INTEGER NOT NULL DEFAULT 0,
+                    lock_vertical_axis INTEGER NOT NULL DEFAULT 0,
                     camera_opacity INTEGER NOT NULL DEFAULT 35,
                     camera_visible INTEGER NOT NULL DEFAULT 1,
                     center_precision INTEGER NOT NULL DEFAULT 50,
@@ -105,6 +107,7 @@ class SqliteProfileStore:
                 "theme": "TEXT NOT NULL DEFAULT 'light'",
                 "use_pitch_assist": "INTEGER NOT NULL DEFAULT 1",
                 "invert_vertical_axis": "INTEGER NOT NULL DEFAULT 0",
+                "lock_vertical_axis": "INTEGER NOT NULL DEFAULT 0",
                 "camera_opacity": "INTEGER NOT NULL DEFAULT 35",
                 "camera_visible": "INTEGER NOT NULL DEFAULT 1",
                 "center_precision": "INTEGER NOT NULL DEFAULT 50",
@@ -149,14 +152,14 @@ class SqliteProfileStore:
                     user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                     stabilization, horizontal_sensitivity, vertical_sensitivity,
                     theme, high_contrast, use_pitch_assist, invert_vertical_axis,
-                    camera_opacity, camera_visible, center_precision,
+                    lock_vertical_axis, camera_opacity, camera_visible, center_precision,
                     eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
                     tts_enabled, tts_voice_id, tts_rate,
                     answer_labels, selection_sound_enabled, selection_sound_yes,
                     selection_sound_no, reading_lock_seconds, custom_question_voice_id,
                     tts_read_question_once, question_intro_enabled, question_intro_seconds
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language=excluded.language,
                     provider_mode=excluded.provider_mode,
@@ -169,6 +172,7 @@ class SqliteProfileStore:
                     high_contrast=excluded.high_contrast,
                     use_pitch_assist=excluded.use_pitch_assist,
                     invert_vertical_axis=excluded.invert_vertical_axis,
+                    lock_vertical_axis=excluded.lock_vertical_axis,
                     camera_opacity=excluded.camera_opacity,
                     camera_visible=excluded.camera_visible,
                     center_precision=excluded.center_precision,
@@ -201,6 +205,7 @@ class SqliteProfileStore:
                     int(preferences.high_contrast),
                     int(preferences.use_pitch_assist),
                     int(preferences.invert_vertical_axis),
+                    int(preferences.lock_vertical_axis),
                     preferences.camera_opacity,
                     int(preferences.camera_visible),
                     preferences.center_precision,
@@ -231,7 +236,7 @@ class SqliteProfileStore:
                 SELECT user_id, language, provider_mode, dwell_ms, neutral_zone_percent,
                        stabilization, horizontal_sensitivity, vertical_sensitivity,
                        theme, high_contrast, use_pitch_assist, invert_vertical_axis,
-                       camera_opacity, camera_visible, center_precision,
+                       lock_vertical_axis, camera_opacity, camera_visible, center_precision,
                        eye_rest_enabled, eye_rest_trigger_seconds, eye_rest_pause_seconds,
                        tts_enabled, tts_voice_id, tts_rate,
                        answer_labels, selection_sound_enabled, selection_sound_yes,
@@ -257,6 +262,7 @@ class SqliteProfileStore:
                 high_contrast=bool(preference_row["high_contrast"]),
                 use_pitch_assist=bool(preference_row["use_pitch_assist"]),
                 invert_vertical_axis=bool(preference_row["invert_vertical_axis"]),
+                lock_vertical_axis=bool(preference_row["lock_vertical_axis"]),
                 camera_opacity=preference_row["camera_opacity"],
                 camera_visible=bool(preference_row["camera_visible"]),
                 center_precision=preference_row["center_precision"],

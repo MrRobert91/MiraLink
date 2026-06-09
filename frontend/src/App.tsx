@@ -117,6 +117,7 @@ export default function App() {
   const [theme, setTheme] = useState<ThemeName>("light");
   const [usePitchAssist, setUsePitchAssist] = useState(true);
   const [invertVerticalAxis, setInvertVerticalAxis] = useState(false);
+  const [lockVerticalAxis, setLockVerticalAxis] = useState(false);
   const [horizontalSensitivity, setHorizontalSensitivity] = useState(1.2);
   const [verticalSensitivity, setVerticalSensitivity] = useState(1.2);
   const [stabilization, setStabilization] = useState(82);
@@ -168,8 +169,11 @@ export default function App() {
   // El usuario pulsó "Empezar formulario" pero la pre-generación aún no terminó:
   // se entra a responder en cuanto deje de estar "preparing".
   const [pendingStart, setPendingStart] = useState(false);
-  const [customQuestionPhase, setCustomQuestionPhase] = useState<"idle" | "compose" | "asking">("idle");
+  const [customQuestionPhase, setCustomQuestionPhase] = useState<
+    "idle" | "compose" | "asking" | "followup"
+  >("idle");
   const [customQuestionText, setCustomQuestionText] = useState("");
+  const [lastCustomAnswer, setLastCustomAnswer] = useState<"Sí" | "No" | null>(null);
   const [auxiliaryAnswers, setAuxiliaryAnswers] = useState<{ question: string; answer: "Sí" | "No" }[]>([]);
   const [statusMessage, setStatusMessage] = useState("Listo para calibrar e importar un formulario.");
   const [importingForm, setImportingForm] = useState(false);
@@ -249,8 +253,15 @@ export default function App() {
     if (providerMode !== "mediapipe") {
       return point;
     }
-    return applyCenterPrecision(point, window.innerWidth, window.innerHeight, centerPrecision);
-  }, [calibrationModel, centerPrecision, frame, horizontalSensitivity, providerMode, rawPoint, verticalSensitivity]);
+    const precise = applyCenterPrecision(point, window.innerWidth, window.innerHeight, centerPrecision);
+    // Bloqueo del eje vertical: la mirada solo mueve el puntero en horizontal.
+    // Se fija la Y al centro de la pantalla; se aplica tras la calibración para
+    // cubrir tanto el punto calibrado como el crudo, sin alterar la calibración.
+    if (lockVerticalAxis) {
+      return { ...precise, y: window.innerHeight / 2 };
+    }
+    return precise;
+  }, [calibrationModel, centerPrecision, frame, horizontalSensitivity, lockVerticalAxis, providerMode, rawPoint, verticalSensitivity]);
   const telemetry = useMemo(() => {
     if (!frame?.features) {
       return null;
@@ -788,8 +799,10 @@ export default function App() {
       }
       cancelCustomSpeech();
       setAuxiliaryAnswers((previous) => [...previous, { question: customQuestionText, answer }]);
-      setCustomQuestionPhase("idle");
-      setCustomQuestionText("");
+      // En vez de volver directo al formulario, se muestra una pantalla de
+      // seguimiento donde el cuidador decide si hacer otra pregunta o continuar.
+      setLastCustomAnswer(answer);
+      setCustomQuestionPhase("followup");
       resetDwell();
       setStatusMessage(`Pregunta auxiliar registrada: ${answer}.`);
     },
@@ -800,8 +813,24 @@ export default function App() {
     cancelCustomSpeech();
     setCustomQuestionPhase("idle");
     setCustomQuestionText("");
+    setLastCustomAnswer(null);
     resetDwell();
   }, [resetDwell, cancelCustomSpeech]);
+
+  // Pantalla de seguimiento tras responder una pregunta personalizada.
+  const handleAskAnotherCustomQuestion = useCallback(() => {
+    setCustomQuestionText("");
+    setLastCustomAnswer(null);
+    setCustomQuestionPhase("compose");
+    resetDwell();
+  }, [resetDwell]);
+
+  const handleContinueFormFromCustom = useCallback(() => {
+    setCustomQuestionText("");
+    setLastCustomAnswer(null);
+    setCustomQuestionPhase("idle");
+    resetDwell();
+  }, [resetDwell]);
 
   // Si se sale del modo de respuesta (pausa, ajustes, reinicio), se cierra
   // cualquier overlay pendiente (descanso o pregunta personalizada).
@@ -815,6 +844,7 @@ export default function App() {
       if (customQuestionPhase !== "idle") {
         setCustomQuestionPhase("idle");
         setCustomQuestionText("");
+        setLastCustomAnswer(null);
       }
       if (questionIntroPhase !== "idle") {
         cancelIntroSpeech();
@@ -1276,6 +1306,7 @@ export default function App() {
         setTheme(normalizeThemeName(preferences.theme));
         setUsePitchAssist(preferences.use_pitch_assist);
         setInvertVerticalAxis(preferences.invert_vertical_axis);
+        setLockVerticalAxis(preferences.lock_vertical_axis);
         setCameraOpacity(preferences.camera_opacity);
         setCameraVisible(preferences.camera_visible);
         setCenterPrecision(preferences.center_precision);
@@ -1321,6 +1352,7 @@ export default function App() {
       high_contrast: themeOptions.find((option) => option.value === theme)?.highContrast ?? false,
       use_pitch_assist: usePitchAssist,
       invert_vertical_axis: invertVerticalAxis,
+      lock_vertical_axis: lockVerticalAxis,
       camera_opacity: cameraOpacity,
       camera_visible: cameraVisible,
       center_precision: centerPrecision,
@@ -1344,6 +1376,7 @@ export default function App() {
       theme,
       horizontalSensitivity,
       invertVerticalAxis,
+      lockVerticalAxis,
       neutralZonePercent,
       providerMode,
       stabilization,
@@ -1385,6 +1418,7 @@ export default function App() {
       setTheme(normalizeThemeName(saved.theme));
       setUsePitchAssist(saved.use_pitch_assist);
       setInvertVerticalAxis(saved.invert_vertical_axis);
+      setLockVerticalAxis(saved.lock_vertical_axis);
       setCameraOpacity(saved.camera_opacity);
       setCameraVisible(saved.camera_visible);
       setCenterPrecision(saved.center_precision);
@@ -1580,9 +1614,12 @@ export default function App() {
           yesLabel={answerLabels.yes}
           noLabel={answerLabels.no}
           loading={customQuestionLoading}
+          lastAnswer={lastCustomAnswer}
           onShow={handleShowCustomQuestion}
           onAnswer={handleAnswerCustomQuestion}
           onCancel={handleCancelCustomQuestion}
+          onAskAnother={handleAskAnotherCustomQuestion}
+          onContinueForm={handleContinueFormFromCustom}
         />
       ) : null}
 
