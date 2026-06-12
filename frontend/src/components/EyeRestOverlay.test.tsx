@@ -26,7 +26,7 @@ describe("EyeRestOverlay", () => {
     const user = userEvent.setup();
     const props = renderPrompt();
 
-    await user.click(screen.getByRole("button", { name: /Descansar un minuto/ }));
+    await user.click(screen.getByRole("button", { name: /Mirada a la derecha/ }));
 
     expect(props.onAccept).toHaveBeenCalledOnce();
     expect(props.onDecline).not.toHaveBeenCalled();
@@ -36,7 +36,7 @@ describe("EyeRestOverlay", () => {
     const user = userEvent.setup();
     const props = renderPrompt();
 
-    await user.click(screen.getByRole("button", { name: /Seguir respondiendo/ }));
+    await user.click(screen.getByRole("button", { name: /Mirada a la izquierda/ }));
 
     expect(props.onDecline).toHaveBeenCalledOnce();
     expect(props.onAccept).not.toHaveBeenCalled();

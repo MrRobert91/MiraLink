@@ -318,7 +318,7 @@ export default function App() {
     selectionSound.playYes();
     const label = activeStep?.optionLabel;
     dispatchFormFlow({ type: "answerYes" });
-    setStatusMessage(label ? `Respuesta registrada: Si a "${label}".` : "Respuesta Si registrada.");
+    setStatusMessage(label ? `Respuesta registrada: Sí a "${label}".` : "Respuesta Sí registrada.");
   }, [activeStep?.optionLabel, selectionSound]);
 
   const handleAnswerNo = useCallback(() => {
@@ -941,8 +941,8 @@ export default function App() {
         // don't fail import if saving fails
       }
     } catch {
-      setImportError("No se pudo importar el formulario. Debe ser publico, de Google/Microsoft Forms y tener opciones multiples o casillas.");
-      setStatusMessage("Importacion fallida.");
+      setImportError("No se pudo importar el formulario. Debe ser público, de Google/Microsoft Forms y tener opciones múltiples o casillas.");
+      setStatusMessage("Importación fallida.");
     } finally {
       setImportingForm(false);
     }
@@ -1073,7 +1073,7 @@ export default function App() {
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Error desconocido";
       setSubmitMessage(`No se pudo enviar: ${detail}`);
-      setStatusMessage("Envio fallido.");
+      setStatusMessage("Envío fallido.");
     } finally {
       setSubmittingForm(false);
     }
@@ -1111,7 +1111,7 @@ export default function App() {
     setCalibrationProgress(0);
     setCalibrationScore(0);
     setCalibrationModel(createEmptyCalibrationModelV2());
-    setStatusMessage("Calibracion automatica iniciada. Mantener la mirada fija en cada punto hasta que avance.");
+    setStatusMessage("Calibración automática iniciada. Mantén la mirada fija en cada punto hasta que avance.");
     appendCalibrationLog(
       `inicio | puntos=${calibrationSequence.length} minFrames=${calibrationMinValidFrames} fallbackFrames=${calibrationFallbackMinFrames} estabilidad=${calibrationFeatureStability}`,
     );
@@ -1214,7 +1214,7 @@ export default function App() {
 
       if (!shouldCapture && !fallbackCapture && !shouldTimeout) {
         setStatusMessage(
-          `Calibracion en curso. Punto ${calibrationIndex + 1} de ${calibrationSequence.length}. Frames validos: ${validFrames}/${calibrationMinValidFrames}.`,
+          `Calibración en curso. Punto ${calibrationIndex + 1} de ${calibrationSequence.length}. Frames válidos: ${validFrames}/${calibrationMinValidFrames}.`,
         );
         return;
       }
@@ -1260,13 +1260,13 @@ export default function App() {
           appendCalibrationLog("resultado insuficiente | menos de 4 muestras capturadas");
           dispatchFormFlow({ type: "completeCalibration" });
           setStatusMessage(
-            "Calibracion completada con datos insuficientes. Repite el proceso con mejor iluminacion y manteniendo la cabeza estable.",
+            "Calibración completada con datos insuficientes. Repite el proceso con mejor iluminación y manteniendo la cabeza estable.",
           );
           return;
         }
 
         dispatchFormFlow({ type: "completeCalibration" });
-        setStatusMessage(`Calibracion completada. Precision estimada: ${Math.round(nextModel.score * 100)}%.`);
+        setStatusMessage(`Calibración completada. Precisión estimada: ${Math.round(nextModel.score * 100)}%.`);
         return;
       }
 
@@ -1281,7 +1281,7 @@ export default function App() {
       }
 
       setStatusMessage(
-        `Calibracion en curso. Punto ${calibrationIndex + 2} de ${calibrationSequence.length}. Muestras validas: ${nextSamples.length}.`,
+        `Calibración en curso. Punto ${calibrationIndex + 2} de ${calibrationSequence.length}. Muestras válidas: ${nextSamples.length}.`,
       );
     }, calibrationSampleIntervalMs);
 

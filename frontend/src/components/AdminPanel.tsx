@@ -101,7 +101,7 @@ function SubmissionRow({ submission, selected, includeAuxiliary, onToggle }: Row
             type="checkbox"
             checked={selected}
             onChange={() => onToggle(submission.id)}
-            aria-label={`Seleccionar envio de ${submission.form_title}`}
+            aria-label={`Seleccionar envío de ${submission.form_title}`}
           />
         </td>
         <td className="admin-cell-title">{submission.form_title}</td>
@@ -122,7 +122,7 @@ function SubmissionRow({ submission, selected, includeAuxiliary, onToggle }: Row
             type="button"
             className="admin-btn admin-btn--ghost"
             onClick={() => exportSubmissionsCsv([submission.id], includeAuxiliary)}
-            title="Exportar este envio como CSV"
+            title="Exportar este envío como CSV"
           >
             CSV
           </button>
@@ -165,7 +165,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       const data = await getSubmissions();
       setSubmissions(data);
     } catch {
-      setError("No se pudieron cargar los envios. Comprueba que el backend esta en marcha.");
+      setError("No se pudieron cargar los envíos. Comprueba que el backend está en marcha.");
     } finally {
       setLoading(false);
     }
@@ -214,10 +214,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     <div className="admin-panel">
       <div className="admin-header">
         <div>
-          <p className="eyebrow">Administracion</p>
+          <p className="eyebrow">Administración</p>
           <h2 className="admin-title">Historial de respuestas a formularios</h2>
           <p className="admin-subtitle">
-            {submissions.length} envio{submissions.length !== 1 ? "s" : ""} registrado{submissions.length !== 1 ? "s" : ""}
+            {submissions.length} envío{submissions.length !== 1 ? "s" : ""} registrado{submissions.length !== 1 ? "s" : ""}
           </p>
         </div>
         <button type="button" className="admin-btn admin-btn--close" onClick={onClose} aria-label="Cerrar panel">
@@ -255,7 +255,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             disabled={selectedIds.length === 0}
             onClick={() => exportSubmissionsCsv(selectedIds, includeAuxiliary)}
           >
-            Exportar seleccion ({selectedIds.length})
+            Exportar selección ({selectedIds.length})
           </button>
           <button
             type="button"
@@ -275,11 +275,11 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       </div>
 
       {loading ? (
-        <p className="admin-loading">Cargando envios...</p>
+        <p className="admin-loading">Cargando envíos...</p>
       ) : error ? (
         <p className="admin-error">{error}</p>
       ) : filtered.length === 0 ? (
-        <p className="admin-empty">No hay envios registrados todavia.</p>
+        <p className="admin-empty">No hay envíos registrados todavía.</p>
       ) : (
         <div className="admin-table-wrapper">
           <table className="admin-table">
@@ -297,7 +297,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 <th>Proveedor</th>
                 <th>Estado externo</th>
                 <th>Enviado el</th>
-                <th>Duracion</th>
+                <th>Duración</th>
                 <th>Preguntas</th>
                 <th>Acciones</th>
               </tr>

@@ -172,7 +172,14 @@ export type SavedForm = {
   last_used_at: string;
 };
 
-export type ThemeName = "light" | "dark" | "colorblind" | "hc-amber" | "hc-mono";
+export type ThemeName =
+  | "light"
+  | "dark"
+  | "dusk"
+  | "sepia"
+  | "colorblind"
+  | "hc-amber"
+  | "hc-mono";
 
 export type ThemeOption = {
   value: ThemeName;
@@ -187,16 +194,30 @@ export const themeOptions: ThemeOption[] = [
   {
     value: "light",
     label: "Claro",
-    description: "Fondo blanco, acentos verdes y texto negro. Recomendado.",
-    swatch: ["#ffffff", "#0b8457", "#0c1a14"],
+    description: "Blanco luminoso con acentos esmeralda y texto oscuro. Recomendado.",
+    swatch: ["#ffffff", "#0c7a4f", "#121c17"],
     highContrast: false,
   },
   {
     value: "dark",
     label: "Oscuro",
-    description: "Inversión del modo blanco y negro: fondo negro y texto blanco.",
-    swatch: ["#000000", "#ffffff", "#ffffff"],
-    highContrast: true,
+    description: "Carbón profundo con acentos menta. Elegante y descansado de noche.",
+    swatch: ["#0b0f0e", "#3bd99e", "#eef4f1"],
+    highContrast: false,
+  },
+  {
+    value: "dusk",
+    label: "Crepúsculo",
+    description: "Índigo profundo con acentos lavanda. Sereno y de alto contraste.",
+    swatch: ["#0e1020", "#9aa5ff", "#eef0ff"],
+    highContrast: false,
+  },
+  {
+    value: "sepia",
+    label: "Lectura cálida",
+    description: "Crema templado de bajo deslumbramiento, ideal para fatiga visual.",
+    swatch: ["#f8f2e5", "#7c4a0d", "#2e2415"],
+    highContrast: false,
   },
   {
     value: "colorblind",

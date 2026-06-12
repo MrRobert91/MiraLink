@@ -46,7 +46,7 @@ export function BinaryFormPanel({
   if (!form) {
     return (
       <section className="binary-panel binary-panel--empty">
-        <p className="eyebrow">Interaccion ocular</p>
+        <p className="eyebrow">Interacción ocular</p>
         <h2>Importa un formulario para empezar.</h2>
       </section>
     );
@@ -55,7 +55,7 @@ export function BinaryFormPanel({
   if (status === "review" || status === "submitted") {
     return (
       <section className="binary-panel binary-panel--review">
-        <p className="eyebrow">Revision final</p>
+        <p className="eyebrow">Revisión final</p>
         <h2>{form.title}</h2>
         <div className="answer-review-list">
           {form.questions.map((question) => (
@@ -98,7 +98,7 @@ export function BinaryFormPanel({
                 : "Respuesta múltiple (casillas)"}
             </p>
             <p className="eyebrow">
-              Pregunta {step.questionIndex + 1}/{step.totalQuestions} - Opcion {step.optionIndex + 1}/{step.totalOptions}
+              Pregunta {step.questionIndex + 1}/{step.totalQuestions} · Opción {step.optionIndex + 1}/{step.totalOptions}
             </p>
             <h2>{step.questionTitle}</h2>
             <p>{step.optionLabel}</p>

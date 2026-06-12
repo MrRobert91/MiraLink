@@ -32,10 +32,11 @@ export function FormImportPanel({ formUrl, importing, error, savedForms, onUrlCh
     <section className="form-import-panel">
       <div>
         <p className="eyebrow">Formulario</p>
-        <h2>Pega la URL pública de tu Microsoft Forms</h2>
+        <h2>Pega la URL pública de tu formulario</h2>
         <p>
-          La aplicacion importara preguntas de opcion multiple o casillas y las convertira en decisiones binarias:
-          mirar izquierda para No, derecha para Si.
+          MiraLink importará las preguntas de opción múltiple o casillas de Google Forms y
+          Microsoft Forms y las convertirá en decisiones binarias: mirar a la izquierda para No,
+          a la derecha para Sí.
         </p>
       </div>
       <div className="form-import-panel__controls">
